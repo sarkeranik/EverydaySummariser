@@ -1,8 +1,8 @@
 # Everyday Summariser
 
 <p align="center">
-  <!-- A placeholder thematic GIF (Second Brain / AI). Replace with your actual demo later! -->
-  <img src="https://media.giphy.com/media/l0HlHFRbmaZtBRhXG/giphy.gif" alt="Everyday Summariser Second Brain" width="500"/>
+  <!-- A placeholder thematic GIF (Data processing / AI). Replace with your actual demo later! -->
+  <img src="https://media.tenor.com/oyboaxLgcNkAAAAM/maths-lz.gif" alt="Everyday Summariser Data Processing" width="500"/>
 </p>
 
 ## The Story
