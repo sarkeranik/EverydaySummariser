@@ -1,6 +1,18 @@
 # Everyday Summariser
 
-A Chrome extension and local Python backend that act as an automated daily journal. As you browse the web, the extension quietly captures text, images, and audio, storing them locally. At the end of the day, it uses the Gemini AI API to generate a daily summary note.
+<p align="center">
+  <img src="https://via.placeholder.com/800x400.png?text=Add+Your+Demo+GIF+Here" alt="Everyday Summariser Demo" width="100%"/>
+</p>
+
+## The Story
+
+**Situation**: Every day, we consume massive amounts of digital information—articles, videos, research, and social media. Yet, keeping track of what we learned or saw is tedious and time-consuming. 
+
+**Task**: We needed a completely frictionless way to capture our daily digital footprint and automatically synthesize it into a clean, searchable journal without interrupting our actual workflow.
+
+**Action**: We built **Everyday Summariser**: a Chrome extension that silently and privately records the text, images, and audio you interact with. It passes this data to a local Python backend. At the end of the day, a single click triggers an AI model (like Google's Gemini, LM Studio, or Ollama) to process all that scattered data.
+
+**Result**: A beautifully formatted, private Markdown journal is automatically generated on your machine every single day, acting as a perfect second brain for your web browsing.
 
 ## Features
 
