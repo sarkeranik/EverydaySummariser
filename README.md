@@ -1,9 +1,6 @@
 # Everyday Summariser
 
-<div align="center" style="max-width: 600px; margin: 0 auto;">
-  <div class="tenor-gif-embed" data-postid="13210487" data-share-method="host" data-aspect-ratio="1.77778" data-width="100%"></div>
-  <script type="text/javascript" async src="https://tenor.com/embed.js"></script>
-</div>
+<img src="https://media1.tenor.com/m/yURfo_oem5cAAAAd/business-productive.gif" width="833" height="466.47999999999996" alt="a penguin wearing a top hat and carrying a briefcase is being productive ." fetchpriority="high" style="max-width: 833px;">
 
 ## The Story
 
