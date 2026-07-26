@@ -1,8 +1,8 @@
 # Everyday Summariser
 
 <p align="center">
-  <!-- A placeholder thematic GIF (Data processing / AI). Replace with your actual demo later! -->
-  <img src="https://media.tenor.com/oyboaxLgcNkAAAAM/maths-lz.gif" alt="Everyday Summariser Data Processing" width="500"/>
+  <!-- A placeholder thematic GIF (Taking Notes). Replace with your actual demo later! -->
+  <img src="https://media.tenor.com/P4H201iNuiIAAAAM/spongebob-patrick.gif" alt="Everyday Summariser Taking Notes" width="500"/>
 </p>
 
 ## The Story
