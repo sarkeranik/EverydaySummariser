@@ -17,12 +17,21 @@ A Chrome extension and local Python backend that act as an automated daily journ
 
 ## Setup Instructions
 
-### 1. Backend Setup (1-Click Start)
+### 1. Backend Setup (Docker - Recommended)
 
-We've provided scripts to automatically set up the Python environment, install dependencies, and start the server.
+The simplest way to run the backend is using Docker and Docker Compose. This ensures you don't need to install Python directly on your system.
 
-- **Windows**: Double-click `start_windows.bat`
-- **macOS / Linux**: Open a terminal and run `bash start_mac.sh` (or `./start_mac.sh`)
+1. Ensure you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed.
+2. In the `backend/` folder, copy `.env.example` to `.env` and configure your AI provider (see "AI Configuration" below).
+3. Open a terminal in the root of the project (where `docker-compose.yml` is) and run:
+   ```bash
+   docker-compose up -d
+   ```
+This will build and start the server in the background. To stop it, run `docker-compose down`. All data (database, audio, notes) will persist safely in your local `backend/` folder.
+
+### 1B. Backend Setup (1-Click Start without Docker)
+
+If you don't want to use Docker, we've provided scripts to automatically set up a local Python environment, install dependencies, and start the server.
 
 *On the very first run, this script will create a default `.env` file in the `backend/` folder. You will need to stop the server, edit that file with your AI configuration, and start it again.*
 

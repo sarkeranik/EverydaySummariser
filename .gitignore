@@ -3,7 +3,7 @@ venv/
 __pycache__/
 *.pyc
 .env
-journal.db
+data/
 audio_uploads/
 daily_notes/
 
