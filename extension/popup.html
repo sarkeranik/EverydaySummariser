@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 15px; width: 280px; }
+    h3 { margin-top: 0; color: #333; }
+    button { 
+        display: block; 
+        width: 100%; 
+        margin-bottom: 15px; 
+        padding: 10px; 
+        cursor: pointer; 
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-weight: bold;
+    }
+    button:hover { background-color: #45a049; }
+    #status { font-size: 13px; color: #666; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h3>Everyday Summariser</h3>
+  <button id="generateBtn">Generate Daily Note</button>
+  <div id="status">Backend status unknown.</div>
+  <script src="popup.js"></script>
+</body>
+</html>

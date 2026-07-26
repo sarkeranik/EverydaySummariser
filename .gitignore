@@ -1,0 +1,12 @@
+# Python / Backend
+venv/
+__pycache__/
+*.pyc
+.env
+journal.db
+audio_uploads/
+daily_notes/
+
+# OS Files
+.DS_Store
+Thumbs.db
