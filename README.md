@@ -1,9 +1,9 @@
 # Everyday Summariser
 
-<p align="center">
-  <!-- A placeholder thematic GIF (Taking Notes). Replace with your actual demo later! -->
-  <img src="https://media.tenor.com/P4H201iNuiIAAAAM/spongebob-patrick.gif" alt="Everyday Summariser Taking Notes" width="500"/>
-</p>
+<div align="center" style="max-width: 600px; margin: 0 auto;">
+  <div class="tenor-gif-embed" data-postid="13210487" data-share-method="host" data-aspect-ratio="1.77778" data-width="100%"></div>
+  <script type="text/javascript" async src="https://tenor.com/embed.js"></script>
+</div>
 
 ## The Story
 
