@@ -1,7 +1,7 @@
 # Everyday Summariser
 
 <p align="center">
-  <img src="https://via.placeholder.com/800x400.png?text=Add+Your+Demo+GIF+Here" alt="Everyday Summariser Demo" width="100%"/>
+  <img src="https://placehold.co/800x400/png?text=Add+Your+Demo+GIF+Here" alt="Everyday Summariser Demo" width="100%"/>
 </p>
 
 ## The Story
