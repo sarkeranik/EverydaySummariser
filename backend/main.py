@@ -7,6 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from database import SessionLocal, engine, CapturedText, CapturedImage, CapturedAudio
 
@@ -92,24 +95,39 @@ def generate_daily_note(db: Session = Depends(get_db)):
         
     summary_prompt += "\nPlease write a brief daily journal entry summarizing what I was looking at today."
 
-    # 2. Call Gemini API
+    # 2. Call AI Provider
+    ai_provider = os.getenv("AI_PROVIDER", "gemini").lower()
+    
     try:
-        import google.generativeai as genai
-        import os
-        from dotenv import load_dotenv
-        
-        load_dotenv()
-        gemini_api_key = os.getenv("GEMINI_API_KEY")
-        if not gemini_api_key:
-            raise Exception("GEMINI_API_KEY environment variable not found. Please create a .env file.")
+        if ai_provider == "gemini":
+            import google.generativeai as genai
             
-        genai.configure(api_key=gemini_api_key)
-        model = genai.GenerativeModel('gemini-1.5-pro-latest')
-        
-        response = model.generate_content(summary_prompt)
-        note_content = response.text
+            gemini_api_key = os.getenv("GEMINI_API_KEY")
+            if not gemini_api_key:
+                raise Exception("GEMINI_API_KEY environment variable not found. Please create a .env file.")
+                
+            genai.configure(api_key=gemini_api_key)
+            model = genai.GenerativeModel('gemini-1.5-pro-latest')
+            
+            response = model.generate_content(summary_prompt)
+            note_content = response.text
+        else:
+            # Local Provider (LM Studio, Ollama, etc. using OpenAI compatible API)
+            local_endpoint = os.getenv("LOCAL_AI_ENDPOINT", "http://localhost:1234/v1")
+            local_model = os.getenv("LOCAL_MODEL_NAME", "local-model")
+            
+            # Using simple requests for OpenAI-compatible endpoint
+            import requests
+            res = requests.post(f"{local_endpoint}/chat/completions", json={
+                "model": local_model,
+                "messages": [{"role": "user", "content": summary_prompt}],
+                "temperature": 0.7
+            })
+            res.raise_for_status()
+            note_content = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+            
     except Exception as e:
-        note_content = f"Error generating summary from Gemini: {str(e)}\n\n(Make sure GEMINI_API_KEY is set in your .env file)"
+        note_content = f"Error generating summary from {ai_provider}: {str(e)}\n\n(Check your .env settings and ensure your local AI is running if applicable)"
         
     # 3. Save as Markdown file
     date_str = datetime.now().strftime("%Y-%m-%d")

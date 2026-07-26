@@ -20,10 +20,20 @@ A Chrome extension and local Python backend that act as an automated daily journ
 ### 1. Backend Setup (FastAPI)
 
 1. Navigate to the `backend/` folder.
-2. Copy `.env.example` to a new file named `.env` and add your Gemini API key:
-   ```env
-   GEMINI_API_KEY=your_gemini_api_key_here
-   ```
+2. Copy `.env.example` to a new file named `.env` and configure your AI provider:
+   - For **Gemini**:
+     ```env
+     AI_PROVIDER=gemini
+     GEMINI_API_KEY=your_gemini_api_key_here
+     ```
+   - For **Local AI (LM Studio or Ollama)**:
+     ```env
+     AI_PROVIDER=local
+     # LM Studio default: http://localhost:1234/v1
+     # Ollama default: http://localhost:11434/v1
+     LOCAL_AI_ENDPOINT=http://localhost:1234/v1
+     LOCAL_MODEL_NAME=your_model_name
+     ```
 3. Create a virtual environment (optional but recommended):
    ```bash
    python -m venv venv
