@@ -17,36 +17,30 @@ A Chrome extension and local Python backend that act as an automated daily journ
 
 ## Setup Instructions
 
-### 1. Backend Setup (FastAPI)
+### 1. Backend Setup (1-Click Start)
 
-1. Navigate to the `backend/` folder.
-2. Copy `.env.example` to a new file named `.env` and configure your AI provider:
-   - For **Gemini**:
-     ```env
-     AI_PROVIDER=gemini
-     GEMINI_API_KEY=your_gemini_api_key_here
-     ```
-   - For **Local AI (LM Studio or Ollama)**:
-     ```env
-     AI_PROVIDER=local
-     # LM Studio default: http://localhost:1234/v1
-     # Ollama default: http://localhost:11434/v1
-     LOCAL_AI_ENDPOINT=http://localhost:1234/v1
-     LOCAL_MODEL_NAME=your_model_name
-     ```
-3. Create a virtual environment (optional but recommended):
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-   ```
-4. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-5. Run the server:
-   ```bash
-   uvicorn main:app --reload
-   ```
+We've provided scripts to automatically set up the Python environment, install dependencies, and start the server.
+
+- **Windows**: Double-click `start_windows.bat`
+- **macOS / Linux**: Open a terminal and run `bash start_mac.sh` (or `./start_mac.sh`)
+
+*On the very first run, this script will create a default `.env` file in the `backend/` folder. You will need to stop the server, edit that file with your AI configuration, and start it again.*
+
+#### AI Configuration (in `backend/.env`)
+
+- **For Gemini**:
+  ```env
+  AI_PROVIDER=gemini
+  GEMINI_API_KEY=your_gemini_api_key_here
+  ```
+- **For Local AI (LM Studio or Ollama)**:
+  ```env
+  AI_PROVIDER=local
+  # LM Studio default: http://localhost:1234/v1
+  # Ollama default: http://localhost:11434/v1
+  LOCAL_AI_ENDPOINT=http://localhost:1234/v1
+  LOCAL_MODEL_NAME=your_model_name
+  ```
 
 ### 2. Chrome Extension Setup
 
