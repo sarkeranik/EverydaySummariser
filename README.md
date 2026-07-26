@@ -1,7 +1,8 @@
 # Everyday Summariser
 
 <p align="center">
-  <img src="https://placehold.co/800x400/png?text=Add+Your+Demo+GIF+Here" alt="Everyday Summariser Demo" width="100%"/>
+  <!-- Replace this URL with your actual screen recording GIF when you make one! -->
+  <img src="https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif" alt="Everyday Summariser Demo" width="600"/>
 </p>
 
 ## The Story
