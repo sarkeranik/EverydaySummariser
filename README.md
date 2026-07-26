@@ -1,8 +1,8 @@
 # Everyday Summariser
 
 <p align="center">
-  <!-- Replace this URL with your actual screen recording GIF when you make one! -->
-  <img src="https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif" alt="Everyday Summariser Demo" width="600"/>
+  <!-- A placeholder thematic GIF (Second Brain / AI). Replace with your actual demo later! -->
+  <img src="https://media.giphy.com/media/l0HlHFRbmaZtBRhXG/giphy.gif" alt="Everyday Summariser Second Brain" width="500"/>
 </p>
 
 ## The Story
