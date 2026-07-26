@@ -7,13 +7,11 @@
 
 ## The Story
 
-**Situation**: Every day, we consume massive amounts of digital information—articles, videos, research, and social media. Yet, keeping track of what we learned or saw is tedious and time-consuming. 
+Every day, we consume massive amounts of digital information—reading articles, watching videos, conducting research, and scrolling through social media. Yet, keeping track of what we actually learned or saw remains tedious and time-consuming. We realized we needed a completely frictionless way to capture our daily digital footprint and automatically synthesize it into a clean, searchable journal, all without interrupting our actual workflow. 
 
-**Task**: We needed a completely frictionless way to capture our daily digital footprint and automatically synthesize it into a clean, searchable journal without interrupting our actual workflow.
+To solve this, we built **Everyday Summariser**. It's a Chrome extension that silently and privately records the text, images, and audio you interact with as you browse, securely passing this data to a local Python backend. At the end of the day, a single click triggers an AI model—like Google's Gemini, LM Studio, or Ollama—to process all that scattered data. 
 
-**Action**: We built **Everyday Summariser**: a Chrome extension that silently and privately records the text, images, and audio you interact with. It passes this data to a local Python backend. At the end of the day, a single click triggers an AI model (like Google's Gemini, LM Studio, or Ollama) to process all that scattered data.
-
-**Result**: A beautifully formatted, private Markdown journal is automatically generated on your machine every single day, acting as a perfect second brain for your web browsing.
+The end result is a beautifully formatted, private Markdown journal generated right on your machine every single day, effectively acting as a perfect second brain for your web browsing.
 
 ## Features
 
