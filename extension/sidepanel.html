@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @font-face {
+      font-family: 'PressStart2P';
+      src: url('https://fonts.gstatic.com/s/pressstart2p/v15/e3t4euO8T-267oIAQAu6jDQyK3nVivM.woff2') format('woff2');
+      font-weight: 400; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: 'VT323';
+      src: url('https://fonts.gstatic.com/s/vt323/v17/pxiKyp0ihIEF2isfFJXUdVNF.woff2') format('woff2');
+      font-weight: 400; font-style: normal; font-display: swap;
+    }
+
+    :root {
+      --bg-primary: #0f0f23;
+      --bg-card: #16213e;
+      --border-pixel: #4a4a6a;
+      --text-primary: #e0e0ff;
+      --text-secondary: #8888aa;
+      --text-muted: #5a5a7a;
+      --accent-primary: #7c3aed;
+      --pixel-green: #00ff88;
+      --pixel-cyan: #00d4ff;
+      --font-pixel: 'PressStart2P', monospace;
+      --font-body: 'VT323', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      width: 100%;
+      padding: 16px;
+      image-rendering: pixelated;
+    }
+
+    /* CRT scanlines */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+      pointer-events: none; z-index: 9999;
+    }
+
+    .header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 3px solid var(--border-pixel);
+    }
+    .header-icon { font-size: 20px; }
+    .header h1 {
+      font-family: var(--font-pixel);
+      font-size: 10px;
+      color: var(--accent-primary);
+    }
+    .header p {
+      font-family: var(--font-body);
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      border: 2px solid var(--border-pixel);
+      font-family: var(--font-pixel);
+      font-size: 7px;
+      margin-bottom: 14px;
+    }
+    .status-pill.online { border-color: var(--pixel-green); color: var(--pixel-green); }
+    .status-pill.offline { border-color: #ff4444; color: #ff4444; }
+    .status-dot-sm { width: 6px; height: 6px; background: currentColor; }
+
+    .section-title {
+      font-family: var(--font-pixel);
+      font-size: 7px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 8px;
+      margin-top: 14px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .stat-box {
+      background: var(--bg-card);
+      border: 2px solid var(--border-pixel);
+      padding: 10px 6px;
+      text-align: center;
+    }
+    .stat-box .stat-emoji { font-size: 16px; }
+    .stat-box .stat-num {
+      font-family: var(--font-pixel);
+      font-size: 14px;
+      color: var(--pixel-green);
+      display: block;
+      margin: 4px 0 2px;
+    }
+    .stat-box .stat-label {
+      font-family: var(--font-pixel);
+      font-size: 6px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .pixel-btn {
+      font-family: var(--font-pixel);
+      font-size: 9px;
+      padding: 10px 16px;
+      border: 3px solid #5b21b6;
+      background: var(--accent-primary);
+      color: #fff;
+      cursor: pointer;
+      text-transform: uppercase;
+      width: 100%;
+      box-shadow: 3px 3px 0 #3b0764;
+      margin-bottom: 8px;
+    }
+    .pixel-btn:hover { background: #6d28d9; }
+    .pixel-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #3b0764; }
+    .pixel-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .pixel-btn.secondary {
+      background: var(--bg-card);
+      border-color: var(--border-pixel);
+      color: var(--text-secondary);
+      box-shadow: 3px 3px 0 rgba(0,0,0,0.3);
+    }
+    .pixel-btn.secondary:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+
+    .pixel-btn.danger {
+      background: #dc2626;
+      border-color: #991b1b;
+      box-shadow: 3px 3px 0 #7f1d1d;
+      font-size: 8px;
+    }
+
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px;
+      background: var(--bg-card);
+      border: 2px solid var(--border-pixel);
+      margin-bottom: 8px;
+    }
+    .toggle-label {
+      font-family: var(--font-body);
+      font-size: 18px;
+      color: var(--text-primary);
+    }
+    .toggle-status {
+      font-family: var(--font-pixel);
+      font-size: 7px;
+    }
+
+    .pixel-toggle {
+      position: relative; width: 40px; height: 20px; cursor: pointer;
+    }
+    .pixel-toggle input { opacity: 0; width: 0; height: 0; }
+    .pixel-toggle-track {
+      position: absolute; inset: 0;
+      background: var(--border-pixel);
+      border: 2px solid var(--text-muted);
+    }
+    .pixel-toggle-track::after {
+      content: ''; position: absolute;
+      top: 2px; left: 2px; width: 12px; height: 12px;
+      background: var(--text-muted);
+      transition: transform 0.1s step-end;
+    }
+    .pixel-toggle input:checked + .pixel-toggle-track {
+      background: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    .pixel-toggle input:checked + .pixel-toggle-track::after {
+      background: #fff; transform: translateX(20px);
+    }
+
+    .result-box {
+      display: none;
+      padding: 10px;
+      border: 2px solid var(--pixel-green);
+      background: rgba(0, 255, 136, 0.05);
+      margin-top: 8px;
+      font-family: var(--font-body);
+      font-size: 16px;
+      color: var(--pixel-green);
+    }
+    .result-box.error { border-color: #ff4444; color: #ff4444; }
+    .result-box.visible { display: block; }
+
+    .toast {
+      position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%) translateY(20px);
+      padding: 8px 14px; font-family: var(--font-pixel); font-size: 8px;
+      background: var(--bg-card); border: 2px solid var(--accent-primary);
+      color: var(--text-primary); z-index: 100;
+      opacity: 0; transition: opacity 0.2s, transform 0.2s;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <span class="header-icon">📓</span>
+    <div>
+      <h1>Everyday Summariser</h1>
+      <p>Side Panel — Quick Actions</p>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="status-pill" id="statusPill">
+    <span class="status-dot-sm"></span>
+    <span id="statusText">CHECKING</span>
+  </div>
+
+  <!-- Stats -->
+  <div class="section-title">Today's Captures</div>
+  <div class="stats-grid">
+    <div class="stat-box">
+      <span class="stat-emoji">📝</span>
+      <span class="stat-num" id="spTexts">0</span>
+      <span class="stat-label">Pages</span>
+    </div>
+    <div class="stat-box">
+      <span class="stat-emoji">🖼️</span>
+      <span class="stat-num" id="spImages">0</span>
+      <span class="stat-label">Images</span>
+    </div>
+    <div class="stat-box">
+      <span class="stat-emoji">🎬</span>
+      <span class="stat-num" id="spYoutubes">0</span>
+      <span class="stat-label">YouTube</span>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="section-title">Quick Actions</div>
+  <button class="pixel-btn" id="spGenerateBtn">✨ Generate Daily Note</button>
+
+  <div class="toggle-row">
+    <div>
+      <span class="toggle-label">Capture</span>
+      <span class="toggle-status" id="spCaptureStatus">Active</span>
+    </div>
+    <label class="pixel-toggle">
+      <input type="checkbox" id="spCaptureToggle" checked>
+      <span class="pixel-toggle-track"></span>
+    </label>
+  </div>
+
+  <button class="pixel-btn secondary" id="spDashboardBtn">📊 Open Dashboard</button>
+  <button class="pixel-btn danger" id="spClearBtn">🗑️ Clear Today</button>
+
+  <!-- Result -->
+  <div class="result-box" id="spResult"></div>
+
+  <!-- Toast -->
+  <div class="toast" id="spToast"></div>
+
+  <script src="theme.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

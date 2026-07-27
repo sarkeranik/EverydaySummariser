@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
   "name": "Everyday Summariser",
-  "version": "1.0",
-  "description": "Automatically capture and summarize your daily browsing into a local journal.",
+  "version": "2.0",
+  "description": "Automatically capture and summarize your daily browsing into a local AI-powered journal. Supports text, images, audio, YouTube transcripts, PDFs, and Twitter threads.",
   "permissions": [
     "activeTab",
     "tabs",
     "storage",
     "tabCapture",
     "scripting",
-    "offscreen"
+    "offscreen",
+    "sidePanel"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -21,12 +22,53 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "exclude_matches": [
+        "*://*.youtube.com/*",
+        "*://*.twitter.com/*",
+        "*://*.x.com/*"
+      ],
+      "js": ["lib/Readability.js", "content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.youtube.com/watch*"
+      ],
+      "js": ["youtube.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.twitter.com/*/status/*",
+        "*://*.x.com/*/status/*"
+      ],
+      "js": ["twitter.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "include_globs": ["*.pdf"],
+      "js": ["pdf-capture.js"],
       "run_at": "document_idle"
     }
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Everyday Summariser"
-  }
+    "default_title": "Everyday Summariser",
+    "default_icon": {
+      "128": "icon128.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "icons": {
+    "128": "icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["dashboard.html", "onboarding.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

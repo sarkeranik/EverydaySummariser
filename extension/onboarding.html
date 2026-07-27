@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Everyday Summariser — Welcome!</title>
+  <style>
+    @font-face {
+      font-family: 'PressStart2P';
+      src: url('https://fonts.gstatic.com/s/pressstart2p/v15/e3t4euO8T-267oIAQAu6jDQyK3nVivM.woff2') format('woff2');
+      font-weight: 400; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: 'VT323';
+      src: url('https://fonts.gstatic.com/s/vt323/v17/pxiKyp0ihIEF2isfFJXUdVNF.woff2') format('woff2');
+      font-weight: 400; font-style: normal; font-display: swap;
+    }
+
+    :root {
+      --bg: #0f0f23;
+      --bg-card: #16213e;
+      --border: #4a4a6a;
+      --text: #e0e0ff;
+      --text-dim: #8888aa;
+      --text-muted: #5a5a7a;
+      --accent: #7c3aed;
+      --green: #00ff88;
+      --cyan: #00d4ff;
+      --danger: #ff4444;
+      --font-pixel: 'PressStart2P', monospace;
+      --font-body: 'VT323', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      image-rendering: pixelated;
+    }
+
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+      pointer-events: none; z-index: 9999;
+    }
+
+    .wizard {
+      width: 600px;
+      max-width: 95vw;
+      border: 4px solid var(--border);
+      background: var(--bg-card);
+      position: relative;
+      z-index: 1;
+    }
+
+    .wizard-header {
+      padding: 20px 24px;
+      border-bottom: 3px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .wizard-title {
+      font-family: var(--font-pixel);
+      font-size: 12px;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .wizard-title .icon { font-size: 24px; }
+
+    .step-indicator {
+      font-family: var(--font-pixel);
+      font-size: 8px;
+      color: var(--text-muted);
+    }
+
+    .wizard-body {
+      padding: 24px;
+      min-height: 300px;
+    }
+
+    .step { display: none; }
+    .step.active { display: block; animation: fadein 0.3s; }
+    @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+    .step-title {
+      font-family: var(--font-pixel);
+      font-size: 14px;
+      color: var(--text);
+      margin-bottom: 8px;
+      text-shadow: 2px 2px 0 rgba(0,0,0,0.3);
+    }
+
+    .step-subtitle {
+      font-size: 20px;
+      color: var(--text-dim);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    .step-content { margin-bottom: 20px; }
+
+    .feature-list {
+      list-style: none;
+      margin-top: 16px;
+    }
+    .feature-list li {
+      font-size: 20px;
+      color: var(--text-dim);
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(74, 74, 106, 0.3);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .feature-list .feat-icon { font-size: 18px; width: 24px; text-align: center; }
+    .feature-list .feat-label { color: var(--green); font-family: var(--font-pixel); font-size: 8px; min-width: 50px; }
+
+    .input-group {
+      margin-bottom: 14px;
+    }
+    .input-label {
+      font-family: var(--font-pixel);
+      font-size: 8px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      display: block;
+    }
+    .input-field {
+      width: 100%;
+      padding: 10px 14px;
+      font-family: var(--font-body);
+      font-size: 20px;
+      background: var(--bg);
+      border: 3px solid var(--border);
+      color: var(--text);
+      outline: none;
+    }
+    .input-field:focus { border-color: var(--accent); }
+
+    .input-select {
+      width: 100%;
+      padding: 10px 14px;
+      font-family: var(--font-body);
+      font-size: 20px;
+      background: var(--bg);
+      border: 3px solid var(--border);
+      color: var(--text);
+      outline: none;
+      cursor: pointer;
+    }
+
+    .test-result {
+      margin-top: 10px;
+      font-family: var(--font-pixel);
+      font-size: 9px;
+      padding: 8px 12px;
+      border: 2px solid var(--border);
+    }
+    .test-result.success { border-color: var(--green); color: var(--green); }
+    .test-result.error { border-color: var(--danger); color: var(--danger); }
+
+    .wizard-footer {
+      padding: 16px 24px;
+      border-top: 3px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .pixel-btn {
+      font-family: var(--font-pixel);
+      font-size: 9px;
+      padding: 10px 18px;
+      border: 3px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text);
+      cursor: pointer;
+      text-transform: uppercase;
+    }
+    .pixel-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .pixel-btn:active { transform: translate(2px, 2px); }
+    .pixel-btn.primary {
+      background: var(--accent);
+      border-color: #5b21b6;
+      color: #fff;
+      box-shadow: 4px 4px 0 #3b0764;
+    }
+    .pixel-btn.primary:hover { background: #6d28d9; color: #fff; }
+    .pixel-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .progress-bar {
+      display: flex;
+      gap: 4px;
+      margin-top: 12px;
+    }
+    .progress-dot {
+      width: 20px;
+      height: 6px;
+      background: var(--border);
+    }
+    .progress-dot.active { background: var(--accent); }
+    .progress-dot.done { background: var(--green); }
+
+    .celebration {
+      text-align: center;
+      padding: 20px;
+    }
+    .celebration .big-icon {
+      font-size: 64px;
+      display: block;
+      margin-bottom: 16px;
+      animation: bounce 1s ease-in-out infinite;
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    .celebration .big-text {
+      font-family: var(--font-pixel);
+      font-size: 16px;
+      color: var(--green);
+      margin-bottom: 8px;
+    }
+    .celebration .sub-text {
+      font-size: 20px;
+      color: var(--text-dim);
+    }
+
+    .hint {
+      font-family: var(--font-body);
+      font-size: 16px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      padding: 8px;
+      border-left: 3px solid var(--accent);
+      background: rgba(124, 58, 237, 0.05);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="wizard">
+    <div class="wizard-header">
+      <div class="wizard-title">
+        <span class="icon">📓</span>
+        <span>Setup Wizard</span>
+      </div>
+      <div class="step-indicator" id="stepIndicator">Step 1 / 5</div>
+    </div>
+
+    <div class="wizard-body">
+      <!-- Step 1: Welcome -->
+      <div class="step active" id="step1">
+        <div class="step-title">👋 Welcome, Adventurer!</div>
+        <div class="step-subtitle">
+          Everyday Summariser automatically captures your daily browsing and turns it into an AI-powered journal.
+        </div>
+        <div class="step-content">
+          <ul class="feature-list">
+            <li><span class="feat-icon">📝</span><span class="feat-label">TEXT</span> Captures clean article text from every page</li>
+            <li><span class="feat-icon">🖼️</span><span class="feat-label">IMAGES</span> Records image URLs for visual context</li>
+            <li><span class="feat-icon">🎵</span><span class="feat-label">AUDIO</span> Records audio from tabs playing sound</li>
+            <li><span class="feat-icon">🎬</span><span class="feat-label">YOUTUBE</span> Extracts video transcripts automatically</li>
+            <li><span class="feat-icon">📄</span><span class="feat-label">PDF</span> Captures text from PDFs in the browser</li>
+            <li><span class="feat-icon">🐦</span><span class="feat-label">TWITTER</span> Extracts thread text from Twitter/X</li>
+          </ul>
+        </div>
+        <div class="hint">💡 Everything stays local on your machine. Your data never leaves your computer.</div>
+      </div>
+
+      <!-- Step 2: Backend -->
+      <div class="step" id="step2">
+        <div class="step-title">🖥️ Backend Setup</div>
+        <div class="step-subtitle">
+          The extension needs a local Python backend to store data and generate summaries.
+        </div>
+        <div class="step-content">
+          <div class="hint">
+            Run one of these commands in the project root:<br><br>
+            <strong>Docker:</strong> docker-compose up -d<br>
+            <strong>Without Docker:</strong> Run start_windows.bat or start_mac.sh
+          </div>
+          <br>
+          <button class="pixel-btn" id="testConnectionBtn">🔌 Test Connection</button>
+          <div class="test-result" id="connectionResult" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Step 3: AI Config -->
+      <div class="step" id="step3">
+        <div class="step-title">🤖 AI Configuration</div>
+        <div class="step-subtitle">
+          Choose which AI will generate your daily journal entries.
+        </div>
+        <div class="step-content">
+          <div class="input-group">
+            <label class="input-label">AI Provider</label>
+            <select class="input-select" id="onbProvider">
+              <option value="gemini">Google Gemini (Cloud)</option>
+              <option value="local">Local AI (LM Studio / Ollama)</option>
+            </select>
+          </div>
+          <div class="input-group" id="onbGeminiGroup">
+            <label class="input-label">Gemini API Key</label>
+            <input type="password" class="input-field" id="onbGeminiKey" placeholder="Enter your Gemini API key">
+          </div>
+          <div class="input-group" id="onbLocalGroup" style="display:none;">
+            <label class="input-label">Local AI Endpoint</label>
+            <input type="text" class="input-field" id="onbLocalEndpoint" placeholder="http://localhost:1234/v1">
+          </div>
+          <div class="hint">💡 You can change this later in Settings from the Dashboard.</div>
+        </div>
+      </div>
+
+      <!-- Step 4: Privacy -->
+      <div class="step" id="step4">
+        <div class="step-title">🔒 Privacy Settings</div>
+        <div class="step-subtitle">
+          Control what gets captured. Add domains you want to exclude.
+        </div>
+        <div class="step-content">
+          <div class="input-group">
+            <label class="input-label">Domain Blocklist (comma-separated)</label>
+            <input type="text" class="input-field" id="onbBlocklist" placeholder="mail.google.com, banking.com, private-site.org">
+          </div>
+          <div class="hint">
+            💡 Pages on blocked domains will NOT be captured. Good for banking, email, and private sites.<br>
+            You can always update this in Settings later.
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 5: Done -->
+      <div class="step" id="step5">
+        <div class="celebration">
+          <span class="big-icon">🎮</span>
+          <div class="big-text">You're All Set!</div>
+          <div class="sub-text">
+            Start browsing normally. The extension will silently capture your activity.<br>
+            Click the extension icon to generate your daily note anytime!
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wizard-footer">
+      <button class="pixel-btn" id="prevBtn" disabled>← Back</button>
+      <div class="progress-bar" id="progressBar">
+        <div class="progress-dot active"></div>
+        <div class="progress-dot"></div>
+        <div class="progress-dot"></div>
+        <div class="progress-dot"></div>
+        <div class="progress-dot"></div>
+      </div>
+      <button class="pixel-btn primary" id="nextBtn">Next →</button>
+    </div>
+  </div>
+
+  <script src="onboarding.js"></script>
+</body>
+</html>

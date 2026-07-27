@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Everyday Summariser — Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+
+  <!-- ═══ Top Header Bar ═══ -->
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <div class="logo">
+        <span class="logo-icon">📓</span>
+        <span>Everyday Summariser</span>
+      </div>
+      <div class="status-pill" id="statusPill">
+        <span class="status-dot-sm"></span>
+        <span id="statusText">CHECKING</span>
+      </div>
+    </div>
+    <div class="top-bar-right">
+      <button class="pixel-btn sm" id="themeToggleBtn" title="Toggle theme">🌙 THEME</button>
+      <button class="pixel-btn sm" id="refreshBtn" title="Refresh data">🔄 REFRESH</button>
+    </div>
+  </div>
+
+  <!-- ═══ Main Layout ═══ -->
+  <div class="dashboard-layout">
+
+    <!-- ═══ Sidebar ═══ -->
+    <nav class="sidebar">
+      <div class="nav-section">
+        <div class="nav-section-title">Dashboard</div>
+        <div class="nav-item active" data-page="overview">
+          <span class="nav-icon">🏠</span>
+          <span>Overview</span>
+        </div>
+        <div class="nav-item" data-page="journal">
+          <span class="nav-icon">📖</span>
+          <span>Journal</span>
+        </div>
+        <div class="nav-item" data-page="search">
+          <span class="nav-icon">🔍</span>
+          <span>Search</span>
+        </div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">Data</div>
+        <div class="nav-item" data-page="browser">
+          <span class="nav-icon">📦</span>
+          <span>Raw Data</span>
+        </div>
+        <div class="nav-item" data-page="tags">
+          <span class="nav-icon">🏷️</span>
+          <span>Tags</span>
+        </div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">Actions</div>
+        <div class="nav-item" data-page="generate">
+          <span class="nav-icon">✨</span>
+          <span>Generate</span>
+        </div>
+        <div class="nav-item" data-page="settings">
+          <span class="nav-icon">⚙️</span>
+          <span>Settings</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- ═══ Main Content Area ═══ -->
+    <main class="main-content">
+
+      <!-- ── Overview Page ── -->
+      <section class="page-section active" id="page-overview">
+        <div class="page-header">
+          <h1 class="page-title">📊 Today's Overview</h1>
+          <p class="page-subtitle">Your browsing activity at a glance</p>
+        </div>
+
+        <div class="stats-grid-dash" id="statsGrid">
+          <div class="stat-box">
+            <span class="stat-emoji">📝</span>
+            <span class="stat-number" id="dashStatTexts">0</span>
+            <span class="stat-name">Pages</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-emoji">🖼️</span>
+            <span class="stat-number" id="dashStatImages">0</span>
+            <span class="stat-name">Images</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-emoji">🎵</span>
+            <span class="stat-number" id="dashStatAudios">0</span>
+            <span class="stat-name">Audio</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-emoji">🎬</span>
+            <span class="stat-number" id="dashStatYoutubes">0</span>
+            <span class="stat-name">YouTube</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-emoji">📄</span>
+            <span class="stat-number" id="dashStatPdfs">0</span>
+            <span class="stat-name">PDFs</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-emoji">🐦</span>
+            <span class="stat-number" id="dashStatTweets">0</span>
+            <span class="stat-name">Tweets</span>
+          </div>
+        </div>
+
+        <div class="pixel-card">
+          <div class="pixel-card-header">
+            <span>📖 Recent Journal Entries</span>
+            <button class="pixel-btn sm" onclick="navigateTo('journal')">View All →</button>
+          </div>
+          <div id="recentNotes">
+            <div class="loading-text">Loading...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Journal Page ── -->
+      <section class="page-section" id="page-journal">
+        <div class="page-header">
+          <h1 class="page-title">📖 Journal Timeline</h1>
+          <p class="page-subtitle">Your AI-generated daily, weekly, and monthly notes</p>
+        </div>
+
+        <!-- Note List View -->
+        <div id="journalListView">
+          <div class="data-tabs" id="journalTabs">
+            <div class="data-tab active" data-filter="">All</div>
+            <div class="data-tab" data-filter="daily">Daily</div>
+            <div class="data-tab" data-filter="weekly">Weekly</div>
+            <div class="data-tab" data-filter="monthly">Monthly</div>
+          </div>
+          <div class="timeline" id="journalTimeline">
+            <div class="loading-text">Loading notes...</div>
+          </div>
+        </div>
+
+        <!-- Note Detail View -->
+        <div class="note-viewer" id="noteViewer">
+          <div class="note-viewer-header">
+            <button class="pixel-btn sm" id="backToJournal">← Back</button>
+            <span class="page-title" id="noteViewerTitle"></span>
+          </div>
+          <div class="note-content" id="noteContent"></div>
+        </div>
+      </section>
+
+      <!-- ── Search Page ── -->
+      <section class="page-section" id="page-search">
+        <div class="page-header">
+          <h1 class="page-title">🔍 Search</h1>
+          <p class="page-subtitle">Find anything you've browsed, watched, or read</p>
+        </div>
+
+        <div class="search-container">
+          <div class="search-input-wrap">
+            <input type="text" class="search-input" id="searchInput" placeholder="Search your browsing history...">
+            <button class="search-btn" id="searchBtn">Search</button>
+          </div>
+        </div>
+
+        <div class="search-results" id="searchResults">
+          <div class="empty-state">
+            <span class="empty-icon">🔮</span>
+            <div class="empty-title">Enter a search term</div>
+            <div class="empty-desc">Search across all your captured pages, YouTube transcripts, PDFs, and notes</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Raw Data Browser ── -->
+      <section class="page-section" id="page-browser">
+        <div class="page-header">
+          <h1 class="page-title">📦 Raw Data Browser</h1>
+          <p class="page-subtitle">Explore your captured content</p>
+        </div>
+
+        <div class="data-tabs" id="dataTabs">
+          <div class="data-tab active" data-type="text">📝 Text</div>
+          <div class="data-tab" data-type="images">🖼️ Images</div>
+          <div class="data-tab" data-type="audio">🎵 Audio</div>
+          <div class="data-tab" data-type="youtube">🎬 YouTube</div>
+          <div class="data-tab" data-type="pdf">📄 PDFs</div>
+          <div class="data-tab" data-type="twitter">🐦 Twitter</div>
+        </div>
+
+        <div class="data-list" id="dataList">
+          <div class="loading-text" style="padding: 20px;">Loading...</div>
+        </div>
+
+        <div class="pagination" id="dataPagination"></div>
+      </section>
+
+      <!-- ── Tags Page ── -->
+      <section class="page-section" id="page-tags">
+        <div class="page-header">
+          <h1 class="page-title">🏷️ Tags Manager</h1>
+          <p class="page-subtitle">Organize and tag your browsing</p>
+        </div>
+
+        <div class="pixel-card">
+          <div class="pixel-card-header"><span>Create Tag</span></div>
+          <div class="tag-create-row">
+            <input type="text" class="tag-input" id="tagNameInput" placeholder="Tag name...">
+            <input type="color" class="tag-color-input" id="tagColorInput" value="#7c3aed">
+            <button class="pixel-btn primary" id="createTagBtn">+ Create</button>
+          </div>
+
+          <div class="tags-grid" id="tagsGrid">
+            <div class="loading-text">Loading tags...</div>
+          </div>
+        </div>
+
+        <div class="pixel-card">
+          <div class="pixel-card-header"><span>Tagged Pages</span></div>
+          <div id="taggedPagesList">
+            <div class="loading-text">Loading tagged pages...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Generate Page ── -->
+      <section class="page-section" id="page-generate">
+        <div class="page-header">
+          <h1 class="page-title">✨ Generate Notes</h1>
+          <p class="page-subtitle">Create AI-powered summaries of your browsing activity</p>
+        </div>
+
+        <div class="generate-grid">
+          <div class="generate-card">
+            <span class="gen-icon">📓</span>
+            <div class="gen-title">Daily Note</div>
+            <div class="gen-desc">Summarize today's browsing into a themed journal entry</div>
+            <button class="pixel-btn primary" id="genDailyBtn">Generate Daily</button>
+          </div>
+          <div class="generate-card">
+            <span class="gen-icon">📅</span>
+            <div class="gen-title">Weekly Rollup</div>
+            <div class="gen-desc">Summarize the past 7 days into a weekly overview</div>
+            <button class="pixel-btn primary" id="genWeeklyBtn">Generate Weekly</button>
+          </div>
+          <div class="generate-card">
+            <span class="gen-icon">📆</span>
+            <div class="gen-title">Monthly Rollup</div>
+            <div class="gen-desc">Summarize the current month's browsing trends</div>
+            <button class="pixel-btn primary" id="genMonthlyBtn">Generate Monthly</button>
+          </div>
+        </div>
+
+        <div class="pixel-card" id="generateResult" style="display:none; margin-top: 20px;">
+          <div class="pixel-card-header"><span id="genResultTitle">Result</span></div>
+          <div id="genResultContent" style="font-family: var(--font-body); font-size: 18px; color: var(--text-secondary);"></div>
+        </div>
+      </section>
+
+      <!-- ── Settings Page ── -->
+      <section class="page-section" id="page-settings">
+        <div class="page-header">
+          <h1 class="page-title">⚙️ Settings</h1>
+          <p class="page-subtitle">Configure your Everyday Summariser</p>
+        </div>
+
+        <div class="pixel-card">
+          <div class="settings-group">
+            <div class="settings-group-title">AI Provider</div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">Provider</div>
+                <div class="setting-desc">Choose your AI backend</div>
+              </div>
+              <select class="setting-select" id="settingAiProvider">
+                <option value="gemini">Google Gemini</option>
+                <option value="local">Local (LM Studio / Ollama)</option>
+              </select>
+            </div>
+            <div class="setting-row" id="geminiKeyRow">
+              <div>
+                <div class="setting-label">Gemini API Key</div>
+                <div class="setting-desc">Your Google Gemini API key</div>
+              </div>
+              <input type="password" class="setting-input" id="settingGeminiKey" placeholder="Enter API key...">
+            </div>
+            <div class="setting-row" id="localEndpointRow" style="display:none;">
+              <div>
+                <div class="setting-label">Local AI Endpoint</div>
+                <div class="setting-desc">URL of your local AI server</div>
+              </div>
+              <input type="text" class="setting-input" id="settingLocalEndpoint" placeholder="http://localhost:1234/v1">
+            </div>
+            <div class="setting-row" id="localModelRow" style="display:none;">
+              <div>
+                <div class="setting-label">Model Name</div>
+                <div class="setting-desc">Name of the local model to use</div>
+              </div>
+              <input type="text" class="setting-input" id="settingLocalModel" placeholder="local-model">
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">Privacy & Capture</div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">Domain Blocklist</div>
+                <div class="setting-desc">Comma-separated domains to exclude from capture</div>
+              </div>
+            </div>
+            <textarea class="setting-textarea" id="settingBlocklist" placeholder="mail.google.com, banking.com"></textarea>
+
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">Capture Images</div>
+                <div class="setting-desc">Capture image URLs from pages</div>
+              </div>
+              <label class="pixel-toggle">
+                <input type="checkbox" id="settingCaptureImages" checked>
+                <span class="pixel-toggle-track"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">Capture Audio</div>
+                <div class="setting-desc">Record audio from tabs playing sound</div>
+              </div>
+              <label class="pixel-toggle">
+                <input type="checkbox" id="settingCaptureAudio" checked>
+                <span class="pixel-toggle-track"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">Appearance</div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">Theme</div>
+                <div class="setting-desc">Switch between dark and light retro themes</div>
+              </div>
+              <select class="setting-select" id="settingTheme">
+                <option value="dark">🌙 Dark Mode</option>
+                <option value="light">☀️ Light Mode</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="margin-top: 16px;">
+            <button class="pixel-btn primary" id="saveSettingsBtn">💾 Save Settings</button>
+            <span class="loading-text" id="settingsSaved" style="display:none; margin-left: 12px;">Saved!</span>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="theme.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

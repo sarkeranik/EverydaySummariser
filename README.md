@@ -12,11 +12,39 @@ The end result is a beautifully formatted, private Markdown journal generated ri
 
 ## Features
 
-- **Automated Text Capture**: Captures the main text of pages you visit.
-- **Image Context**: Captures the source URLs of images on the page.
+### 🎯 Smart Content Capture
+- **Readability-Based Extraction**: Uses Mozilla's Readability.js to cleanly extract article text, stripping out ads, navigation, and other noise. Falls back to DOM heuristics and raw text when needed.
+- **Image Context**: Captures source URLs of significant images (filters out tiny tracking pixels and icons).
 - **Audio Capture**: Automatically records audio from tabs that are playing sound.
-- **Local Storage**: All captured data is stored in a local SQLite database (`journal.db`).
-- **AI Daily Summary**: Generates a daily Markdown journal summarizing your web activity using Google's Gemini API.
+- **YouTube Transcripts**: Automatically pulls captions/transcripts from YouTube videos using the built-in timedtext API.
+- **PDF Extraction**: Captures text from PDFs opened in Chrome using pdf.js.
+- **Twitter/X Threads**: Extracts full thread text from Twitter/X status pages.
+- **Domain Blocklist**: Configure domains to exclude from capture (banking, email, etc.).
+
+### 🤖 AI-Powered Summaries
+- **Categorized Daily Journals**: AI groups your browsing by topic (Research, Entertainment, News, etc.) with relevant emoji.
+- **Key Takeaways**: Extracts the most important learnings and facts from each page.
+- **Time-Based Sections**: Organizes content by Morning / Afternoon / Evening based on timestamps.
+- **Mood & Productivity Analysis**: AI infers focus areas and productivity with a focus score.
+- **Weekly & Monthly Rollups**: Auto-scheduled (Sunday & 1st of month) summaries, plus manual generation anytime.
+
+### 🔍 Search & Organize
+- **Full-Text Search**: SQLite FTS5-powered search across all captured text, YouTube transcripts, PDFs, Twitter threads, and generated notes.
+- **Tag System**: Create colored tags and tag specific pages for easy recall.
+- **Journal Timeline**: Browse past daily, weekly, and monthly notes with full markdown rendering.
+- **Raw Data Browser**: Explore all captured content with pagination and filtering.
+
+### 🎮 Retro 8-bit Pixel Art UI
+- **Full-Tab Dashboard**: The primary experience with journal timeline, search, raw data browser, tags, generate controls, and settings. Styled with NES-inspired pixel art aesthetics.
+- **Side Panel**: Lightweight companion showing today's stats and quick actions.
+- **Popup**: Quick-status hub with stats, generate button, and dashboard/sidepanel launchers.
+- **Dark & Light Themes**: Both in retro pixel art style with CRT scanline overlay.
+- **Onboarding Wizard**: First-run multi-step setup for backend, AI, and privacy configuration.
+
+### 💾 Local & Private
+- All captured data is stored in a local SQLite database (`journal.db`).
+- All processing happens on your machine—no data is ever sent to third parties.
+- Generated notes are saved as Markdown files in `backend/daily_notes/`.
 
 ## Repository Structure
 
@@ -39,9 +67,12 @@ This will build and start the server in the background. To stop it, run `docker-
 
 ### 1B. Backend Setup (1-Click Start without Docker)
 
-If you don't want to use Docker, we've provided scripts to automatically set up a local Python environment, install dependencies, and start the server.
+If you don't want to use Docker, we've provided scripts to automatically set up a local Python environment, install dependencies, and start the server:
 
-*On the very first run, this script will create a default `.env` file in the `backend/` folder. You will need to stop the server, edit that file with your AI configuration, and start it again.*
+- **Windows**: Double-click `start_windows.bat` in the project root.
+- **macOS / Linux**: Run `./start_mac.sh` in your terminal.
+
+*On the very first run, this script will create a default `.env` file in the `backend/` folder. You can configure your AI provider either in `backend/.env` or directly inside the Chrome Extension's Onboarding Wizard / Settings page.*
 
 #### AI Configuration (in `backend/.env`)
 
@@ -64,10 +95,39 @@ If you don't want to use Docker, we've provided scripts to automatically set up 
 1. Open Chrome and navigate to `chrome://extensions/`.
 2. Enable **Developer mode** in the top right.
 3. Click **Load unpacked** and select the `extension/` directory from this repository.
+4. The onboarding wizard will open on first install to guide you through setup.
 
 ## Usage
 
 1. Ensure the Python backend is running (`uvicorn main:app`).
 2. Browse the web normally. The extension will silently capture data to your local SQLite database.
-3. To generate your summary, click the **Everyday Summariser** icon in your Chrome toolbar and click **Generate Daily Note**.
-4. Your note will be saved as a Markdown file in `backend/daily_notes/`.
+3. **Quick access**: Click the extension icon for a popup with today's stats and quick actions.
+4. **Generate notes**: Click **Generate Daily Note** from the popup, side panel, or full dashboard.
+5. **Dashboard**: Click **📊 Dashboard** from the popup to open the full retro pixel art dashboard with journal timeline, search, tags, raw data browser, and settings.
+6. **Side Panel**: Use Chrome's side panel for a lightweight companion view alongside your browsing.
+7. Your notes are saved as Markdown files in `backend/daily_notes/`.
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/health` | GET | Health check |
+| `/api/stats` | GET | Today's capture counts |
+| `/api/text` | POST | Save captured page text |
+| `/api/images` | POST | Save captured image URLs |
+| `/api/audio` | POST | Save captured audio file |
+| `/api/youtube` | POST | Save YouTube transcript |
+| `/api/pdf` | POST | Save extracted PDF text |
+| `/api/twitter` | POST | Save Twitter thread text |
+| `/api/search?q=...` | GET | Full-text search |
+| `/api/notes` | GET | List all generated notes |
+| `/api/notes/{date}` | GET | Get a specific note |
+| `/api/tags` | GET/POST | List/create tags |
+| `/api/tag-page` | POST | Tag a page |
+| `/api/tagged-pages` | GET | Get tagged pages |
+| `/api/settings` | GET/PUT | Get/update settings |
+| `/api/captured` | GET | Browse raw captured data |
+| `/api/generate-daily-note` | POST | Generate daily note |
+| `/api/generate-weekly-note` | POST | Generate weekly rollup |
+| `/api/generate-monthly-note` | POST | Generate monthly rollup |
+| `/api/clear-today` | POST | Clear today's data |
