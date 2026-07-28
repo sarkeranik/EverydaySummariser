@@ -138,15 +138,29 @@ chrome.runtime.onInstalled.addListener((details) => {
 });
 
 // ─── Audio Recording ────────────────────────────────────────────────────────
-let recordingTabs = new Set();
+let currentRecordingTabId = null;
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   const { captureEnabled } = await chrome.storage.local.get('captureEnabled');
   const enabled = captureEnabled !== false;
 
-  if (changeInfo.audible === true && !recordingTabs.has(tabId) && enabled) {
+  if (changeInfo.audible === true && enabled) {
+    if (currentRecordingTabId === tabId) return;
+
+    // Stop any existing recording
+    if (currentRecordingTabId !== null) {
+      console.log(`Tab ${tabId} became audible. Stopping previous capture on tab ${currentRecordingTabId}...`);
+      chrome.runtime.sendMessage({
+        type: 'STOP_RECORDING',
+        target: 'offscreen',
+        payload: {
+          tabId: currentRecordingTabId
+        }
+      });
+    }
+
     console.log(`Tab ${tabId} became audible. Starting capture...`);
-    recordingTabs.add(tabId);
+    currentRecordingTabId = tabId;
 
     const existingContexts = await chrome.runtime.getContexts({});
     const offscreenDocument = existingContexts.find(
@@ -174,9 +188,9 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         });
       }
     });
-  } else if (changeInfo.audible === false && recordingTabs.has(tabId)) {
+  } else if (changeInfo.audible === false && currentRecordingTabId === tabId) {
     console.log(`Tab ${tabId} stopped being audible. Stopping capture...`);
-    recordingTabs.delete(tabId);
+    currentRecordingTabId = null;
     chrome.runtime.sendMessage({
       type: 'STOP_RECORDING',
       target: 'offscreen',

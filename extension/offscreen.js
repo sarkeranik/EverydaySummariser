@@ -50,8 +50,8 @@ async function startRecording({ streamId, tabId, url }) {
       }
     };
 
-    // Record in chunks (e.g., every 30 seconds)
-    recorder.start(30000); 
+    // Record in chunks (e.g., every 5 minutes)
+    recorder.start(300000); 
     
   } catch (err) {
     console.error("Failed to start recording:", err);

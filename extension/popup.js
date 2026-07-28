@@ -34,19 +34,26 @@ function showToast(message, duration = 2000) {
   }, duration);
 }
 
-// ─── Health Check ────────────────────────────────────────────────────────────
+// ─── Health Check ────────────────────────────────────────────
+// Track AI readiness to gate the generate button
+let _aiReady = false;
+
 async function checkHealth() {
   try {
     const res = await fetch(`${BACKEND_URL}/api/health`, { signal: AbortSignal.timeout(3000) });
     const data = await res.json();
     if (data.status === 'ok') {
       setStatus('online');
+      // Show AI model readiness
+      _aiReady = data.ai_ready === true;
+      setAiStatus(_aiReady, data.ai_provider, data.ai_model, data.ai_error);
       return true;
     }
   } catch (err) {
     // Backend unreachable
   }
   setStatus('offline');
+  setAiStatus(false, null, null, 'Backend offline');
   return false;
 }
 
@@ -59,6 +66,49 @@ function setStatus(state) {
   } else {
     statusLabel.textContent = 'Backend offline';
     statusBadge.textContent = 'OFFLINE';
+  }
+}
+
+function setAiStatus(ready, provider, model, errorMsg) {
+  // Inject or update the AI model status row below the main status bar
+  let aiRow = document.getElementById('aiStatusRow');
+  if (!aiRow) {
+    aiRow = document.createElement('div');
+    aiRow.id = 'aiStatusRow';
+    aiRow.style.cssText = [
+      'display:flex', 'align-items:center', 'gap:8px',
+      'margin-bottom:10px', 'padding:6px 12px',
+      'border:2px solid var(--border-pixel)',
+      'background:var(--bg-card)', 'font-size:14px',
+    ].join(';');
+    // Insert after status bar
+    const statusBar = document.querySelector('.status-bar');
+    if (statusBar) statusBar.insertAdjacentElement('afterend', aiRow);
+  }
+
+  const dot = ready
+    ? '<span style="width:8px;height:8px;background:#00ff88;display:inline-block;flex-shrink:0;animation:blink 1.5s step-end infinite"></span>'
+    : '<span style="width:8px;height:8px;background:#ff4444;display:inline-block;flex-shrink:0"></span>';
+
+  const providerLabel = provider
+    ? (provider === 'gemini' ? 'Gemini' : 'Local AI')
+    : '—';
+  const modelLabel = model || '—';
+
+  if (ready) {
+    aiRow.innerHTML = `${dot} <span style="color:var(--text-secondary)">Model ready:</span> <span style="color:#00ff88">${providerLabel} / ${modelLabel}</span>`;
+  } else {
+    const tip = errorMsg ? ` — ${errorMsg}` : '';
+    aiRow.innerHTML = `${dot} <span style="color:var(--text-secondary)">Model offline</span><span style="color:#ff4444">${tip}</span>`;
+  }
+
+  // Gate the generate button
+  generateBtn.disabled = !ready;
+  generateBtn.title = ready ? '' : (errorMsg || 'AI model not ready');
+  if (!ready) {
+    btnText.textContent = '⚠️ AI Model Not Ready';
+  } else {
+    btnText.textContent = '✨ Generate Daily Note';
   }
 }
 

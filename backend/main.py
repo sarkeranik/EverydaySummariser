@@ -99,12 +99,99 @@ class SettingUpdate(BaseModel):
 
 @app.get("/api/health")
 def health_check():
-    """Simple health check endpoint for the Chrome extension to verify connectivity."""
+    """Simple health check endpoint. Also probes AI provider so the extension
+    can show a combined backend+model readiness status."""
+    ai_status = _probe_ai_provider()
     return {
         "status": "ok",
         "timestamp": datetime.utcnow().isoformat(),
-        "version": "2.0.0"
+        "version": "2.0.0",
+        "ai_ready": ai_status["ready"],
+        "ai_provider": ai_status["provider"],
+        "ai_model": ai_status["model"],
+        "ai_error": ai_status.get("error"),
     }
+
+
+@app.get("/api/ai-status")
+def ai_status_check():
+    """Dedicated endpoint to check whether the configured AI model is reachable
+    and ready to process requests."""
+    result = _probe_ai_provider()
+    return result
+
+
+def _probe_ai_provider() -> dict:
+    """Probe the configured AI provider and return a status dict."""
+    provider = os.getenv("AI_PROVIDER", "gemini").lower()
+
+    if provider == "gemini":
+        api_key = os.getenv("GEMINI_API_KEY", "")
+        if not api_key:
+            return {
+                "ready": False,
+                "provider": "gemini",
+                "model": "gemini-2.0-flash",
+                "error": "GEMINI_API_KEY is not set in .env",
+            }
+        # Lightweight list-models call to verify the key works
+        try:
+            resp = requests.get(
+                "https://generativelanguage.googleapis.com/v1beta/models",
+                params={"key": api_key},
+                timeout=5,
+            )
+            if resp.status_code == 200:
+                return {"ready": True, "provider": "gemini", "model": "gemini-2.0-flash"}
+            else:
+                return {
+                    "ready": False,
+                    "provider": "gemini",
+                    "model": "gemini-2.0-flash",
+                    "error": f"Gemini API key rejected (HTTP {resp.status_code})",
+                }
+        except Exception as exc:
+            return {
+                "ready": False,
+                "provider": "gemini",
+                "model": "gemini-2.0-flash",
+                "error": f"Could not reach Gemini API: {exc}",
+            }
+    else:
+        # Local provider (Ollama / LM Studio)
+        endpoint = os.getenv("LOCAL_AI_ENDPOINT", "http://localhost:1234/v1")
+        model = os.getenv("LOCAL_MODEL_NAME", "local-model")
+        # Try the /v1/models list first; fall back to a tiny chat completion probe
+        try:
+            resp = requests.get(f"{endpoint}/models", timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                model_ids = [m.get("id", "") for m in data.get("data", [])]
+                if model_ids and model not in model_ids:
+                    return {
+                        "ready": False,
+                        "provider": "local",
+                        "model": model,
+                        "error": (
+                            f"Model '{model}' not found. "
+                            f"Available: {', '.join(model_ids[:5])}"
+                        ),
+                    }
+                return {"ready": True, "provider": "local", "model": model}
+            else:
+                return {
+                    "ready": False,
+                    "provider": "local",
+                    "model": model,
+                    "error": f"Local AI endpoint returned HTTP {resp.status_code}",
+                }
+        except Exception as exc:
+            return {
+                "ready": False,
+                "provider": "local",
+                "model": model,
+                "error": f"Cannot reach local AI at {endpoint}: {exc}",
+            }
 
 
 # ─── Stats ───────────────────────────────────────────────────────────────────
@@ -554,8 +641,8 @@ def get_tagged_pages(tag: Optional[str] = None, db: Session = Depends(get_db)):
 DEFAULT_SETTINGS = {
     "ai_provider": "gemini",
     "gemini_api_key": "",
-    "local_ai_endpoint": "http://localhost:1234/v1",
-    "local_model_name": "local-model",
+    "local_ai_endpoint": "http://localhost:11434/v1",
+    "local_model_name": "qwen2.5:3b",
     "domain_blocklist": "mail.google.com,banking.example.com",
     "dwell_time_threshold": "0",
     "theme": "dark",
@@ -791,10 +878,22 @@ def generate_daily_note(db: Session = Depends(get_db)):
 
     prompt, visited_urls = build_summary_prompt(texts, images, youtubes, pdfs, tweets, "daily")
 
+    # Pre-flight: make sure the AI model is reachable before building the note
+    ai_check = _probe_ai_provider()
+    if not ai_check["ready"]:
+        return {
+            "status": "error",
+            "message": f"AI model not ready — {ai_check.get('error', 'unknown error')}. "
+                       f"Check Settings › AI Provider.",
+        }
+
     try:
         note_content = call_ai(prompt)
     except Exception as e:
-        note_content = f"Error generating summary: {str(e)}\n\n(Check your .env settings)"
+        return {
+            "status": "error",
+            "message": f"AI generation failed: {str(e)}",
+        }
 
     # Save as Markdown file
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -859,10 +958,21 @@ def generate_weekly_note(db: Session = Depends(get_db)):
 
     prompt, visited_urls = build_summary_prompt(texts, images, youtubes, pdfs, tweets, "weekly")
 
+    ai_check = _probe_ai_provider()
+    if not ai_check["ready"]:
+        return {
+            "status": "error",
+            "message": f"AI model not ready — {ai_check.get('error', 'unknown error')}. "
+                       f"Check Settings › AI Provider.",
+        }
+
     try:
         note_content = call_ai(prompt)
     except Exception as e:
-        note_content = f"Error generating weekly summary: {str(e)}"
+        return {
+            "status": "error",
+            "message": f"AI generation failed: {str(e)}",
+        }
 
     today = date.today()
     week_number = today.isocalendar()[1]
@@ -904,10 +1014,21 @@ def generate_monthly_note(db: Session = Depends(get_db)):
 
     prompt, visited_urls = build_summary_prompt(texts, images, youtubes, pdfs, tweets, "monthly")
 
+    ai_check = _probe_ai_provider()
+    if not ai_check["ready"]:
+        return {
+            "status": "error",
+            "message": f"AI model not ready — {ai_check.get('error', 'unknown error')}. "
+                       f"Check Settings › AI Provider.",
+        }
+
     try:
         note_content = call_ai(prompt)
     except Exception as e:
-        note_content = f"Error generating monthly summary: {str(e)}"
+        return {
+            "status": "error",
+            "message": f"AI generation failed: {str(e)}",
+        }
 
     month_str = today.strftime("%Y-%m")
     relative_path = f"daily_notes/monthly_{month_str}.md"

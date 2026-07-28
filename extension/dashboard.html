@@ -275,12 +275,12 @@
             <div class="setting-row">
               <div>
                 <div class="setting-label">Provider</div>
-                <div class="setting-desc">Choose your AI backend</div>
+                <div class="setting-desc">Determined by the backend startup script</div>
               </div>
-              <select class="setting-select" id="settingAiProvider">
-                <option value="gemini">Google Gemini</option>
-                <option value="local">Local (LM Studio / Ollama)</option>
-              </select>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div class="setting-read-only" id="displayAiProvider" style="font-family: var(--font-body); font-size: 20px; color: var(--text); padding: 8px 12px; background: rgba(0,0,0,0.2); border: 2px solid var(--border);">Loading...</div>
+                <button class="pixel-btn sm" id="resyncProviderBtn">🔄 Resync</button>
+              </div>
             </div>
             <div class="setting-row" id="geminiKeyRow">
               <div>
@@ -302,6 +302,21 @@
                 <div class="setting-desc">Name of the local model to use</div>
               </div>
               <input type="text" class="setting-input" id="settingLocalModel" placeholder="local-model">
+            </div>
+
+            <!-- ── Live Model Status ── -->
+            <div class="setting-row" id="modelStatusRow">
+              <div>
+                <div class="setting-label">Model Status</div>
+                <div class="setting-desc" id="modelStatusDesc">Checking…</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div id="modelStatusBadge" style="
+                  font-family: var(--font-body); font-size: 18px;
+                  padding: 6px 14px; border: 2px solid var(--border);
+                  color: var(--text-muted);">Checking…</div>
+                <button class="pixel-btn sm" id="checkAiBtn">🔍 Check Now</button>
+              </div>
             </div>
           </div>
 

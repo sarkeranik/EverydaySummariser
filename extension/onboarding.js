@@ -79,6 +79,18 @@ document.getElementById('testConnectionBtn').addEventListener('click', async () 
     if (data.status === 'ok') {
       resultEl.className = 'test-result success';
       resultEl.textContent = `✅ Connected! Backend v${data.version} is running.`;
+      
+      try {
+        const setRes = await fetch(`${BACKEND_URL}/api/settings`);
+        const setData = await setRes.json();
+        window.onboardSettings = setData.settings || {};
+        
+        const isLocal = window.onboardSettings.ai_provider === 'local';
+        document.getElementById('onbGeminiGroup').style.display = isLocal ? 'none' : 'block';
+        document.getElementById('onbLocalGroup').style.display = isLocal ? 'block' : 'none';
+      } catch (e) {
+        // Fallback
+      }
     } else {
       resultEl.className = 'test-result error';
       resultEl.textContent = '❌ Backend responded but returned unexpected data.';
@@ -90,19 +102,10 @@ document.getElementById('testConnectionBtn').addEventListener('click', async () 
 });
 
 // ─── Step 3: AI Provider Toggle ─────────────────────────────────────────────
-const providerSelect = document.getElementById('onbProvider');
-const geminiGroup = document.getElementById('onbGeminiGroup');
-const localGroup = document.getElementById('onbLocalGroup');
-
-providerSelect.addEventListener('change', () => {
-  const isLocal = providerSelect.value === 'local';
-  geminiGroup.style.display = isLocal ? 'none' : 'block';
-  localGroup.style.display = isLocal ? 'block' : 'none';
-});
 
 async function saveAiConfig() {
-  const provider = providerSelect.value;
-  const updates = [{ key: 'ai_provider', value: provider }];
+  const provider = window.onboardSettings?.ai_provider || 'gemini';
+  const updates = [];
 
   if (provider === 'gemini') {
     const key = document.getElementById('onbGeminiKey').value.trim();
@@ -113,11 +116,13 @@ async function saveAiConfig() {
   }
 
   try {
-    await fetch(`${BACKEND_URL}/api/settings`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates)
-    });
+    if (updates.length > 0) {
+      await fetch(`${BACKEND_URL}/api/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+    }
   } catch {
     // Settings will use defaults if backend is unreachable
   }

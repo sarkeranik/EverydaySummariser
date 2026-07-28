@@ -36,7 +36,9 @@ function showToast(message, duration = 2500) {
   setTimeout(() => toast.classList.remove('show'), duration);
 }
 
-// ─── Health Check ───────────────────────────────────────────────────────────
+// ─── Health Check ───────────────────────────────────────────
+let _dashAiReady = false;
+
 async function checkHealth() {
   try {
     const res = await fetch(`${BACKEND_URL}/api/health`, { signal: AbortSignal.timeout(3000) });
@@ -44,12 +46,62 @@ async function checkHealth() {
     if (data.status === 'ok') {
       statusPill.className = 'status-pill online';
       statusText.textContent = 'ONLINE';
+      // Track AI model readiness and gate generate buttons
+      _dashAiReady = data.ai_ready === true;
+      setDashAiStatus(_dashAiReady, data.ai_provider, data.ai_model, data.ai_error);
       return true;
     }
   } catch {}
   statusPill.className = 'status-pill offline';
   statusText.textContent = 'OFFLINE';
+  _dashAiReady = false;
+  setDashAiStatus(false, null, null, 'Backend offline');
   return false;
+}
+
+/**
+ * Updates the AI model status badge in the header and enables/disables
+ * all generate buttons accordingly.
+ */
+function setDashAiStatus(ready, provider, model, errorMsg) {
+  // Update or create the AI model chip in the top bar
+  let chip = document.getElementById('aiStatusChip');
+  if (!chip) {
+    chip = document.createElement('div');
+    chip.id = 'aiStatusChip';
+    chip.style.cssText = [
+      'display:flex', 'align-items:center', 'gap:6px',
+      'padding:4px 10px',
+      'border:2px solid var(--border)',
+      'font-family:var(--font-body)', 'font-size:16px',
+      'cursor:default',
+    ].join(';');
+    const topBarLeft = document.querySelector('.top-bar-left');
+    if (topBarLeft) topBarLeft.appendChild(chip);
+  }
+
+  const providerLabel = provider === 'gemini' ? 'Gemini' : provider === 'local' ? 'Local AI' : '?';
+  const modelLabel = model || '?';
+
+  if (ready) {
+    chip.style.borderColor = 'var(--pixel-green, #00ff88)';
+    chip.style.color = 'var(--pixel-green, #00ff88)';
+    chip.title = `Model ready: ${providerLabel} / ${modelLabel}`;
+    chip.innerHTML = `<span style="width:7px;height:7px;background:#00ff88;display:inline-block;border-radius:0"></span> ${providerLabel} / ${modelLabel}`;
+  } else {
+    chip.style.borderColor = '#ff4444';
+    chip.style.color = '#ff4444';
+    chip.title = errorMsg || 'AI model not ready';
+    chip.innerHTML = `<span style="width:7px;height:7px;background:#ff4444;display:inline-block;border-radius:0"></span> Model offline`;
+  }
+
+  // Gate all three generate buttons
+  ['genDailyBtn', 'genWeeklyBtn', 'genMonthlyBtn'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = !ready;
+    btn.title = ready ? '' : (errorMsg || 'AI model not ready — check Settings › AI Provider');
+  });
 }
 
 // ─── Navigation ─────────────────────────────────────────────────────────────
@@ -519,12 +571,12 @@ async function generateNote(type) {
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 function initSettings() {
-  const providerSelect = document.getElementById('settingAiProvider');
-  providerSelect.addEventListener('change', () => {
-    const isLocal = providerSelect.value === 'local';
-    document.getElementById('geminiKeyRow').style.display = isLocal ? 'none' : 'flex';
-    document.getElementById('localEndpointRow').style.display = isLocal ? 'flex' : 'none';
-    document.getElementById('localModelRow').style.display = isLocal ? 'flex' : 'none';
+  document.getElementById('resyncProviderBtn').addEventListener('click', async () => {
+    document.getElementById('displayAiProvider').textContent = 'Loading...';
+    await loadSettings();
+    // Also re-probe AI model status
+    await checkHealth();
+    showToast('🔄 Settings Resynced');
   });
 
   document.getElementById('settingTheme').addEventListener('change', (e) => {
@@ -534,6 +586,49 @@ function initSettings() {
   });
 
   document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+
+  // "Check Now" button — directly calls /api/ai-status
+  document.getElementById('checkAiBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('checkAiBtn');
+    btn.textContent = '⏳ Checking…';
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/ai-status`, { signal: AbortSignal.timeout(8000) });
+      const data = await res.json();
+      updateSettingsModelStatus(data.ready, data.provider, data.model, data.error);
+      // Also refresh the top-bar chip + button gating
+      setDashAiStatus(data.ready, data.provider, data.model, data.error);
+    } catch {
+      updateSettingsModelStatus(false, null, null, 'Could not reach backend');
+    } finally {
+      btn.textContent = '🔍 Check Now';
+      btn.disabled = false;
+    }
+  });
+}
+
+/** Renders result of AI status probe into the Settings Model Status row. */
+function updateSettingsModelStatus(ready, provider, model, errorMsg) {
+  const badge = document.getElementById('modelStatusBadge');
+  const desc = document.getElementById('modelStatusDesc');
+  if (!badge || !desc) return;
+
+  const providerLabel = provider === 'gemini' ? 'Gemini' : provider === 'local' ? 'Local AI' : '?';
+  const modelLabel = model || '?';
+
+  if (ready) {
+    badge.textContent = '✅ READY';
+    badge.style.borderColor = '#00ff88';
+    badge.style.color = '#00ff88';
+    desc.textContent = `${providerLabel} / ${modelLabel} is reachable and ready`;
+    desc.style.color = '';
+  } else {
+    badge.textContent = '❌ NOT READY';
+    badge.style.borderColor = '#ff4444';
+    badge.style.color = '#ff4444';
+    desc.textContent = errorMsg || 'Model unreachable — check endpoint and model name';
+    desc.style.color = '#ff4444';
+  }
 }
 
 async function loadSettings() {
@@ -542,7 +637,13 @@ async function loadSettings() {
     const data = await res.json();
     if (data.settings) {
       const s = data.settings;
-      document.getElementById('settingAiProvider').value = s.ai_provider || 'gemini';
+      const isLocal = s.ai_provider === 'local';
+      
+      let providerText = isLocal ? 'Local (Ollama / LM Studio)' : 'Google Gemini';
+      if (!isLocal && !s.gemini_api_key) {
+        providerText = 'Google Gemini ⚠️ (Missing API Key)';
+      }
+      document.getElementById('displayAiProvider').textContent = providerText;
       document.getElementById('settingGeminiKey').value = s.gemini_api_key || '';
       document.getElementById('settingLocalEndpoint').value = s.local_ai_endpoint || '';
       document.getElementById('settingLocalModel').value = s.local_model_name || '';
@@ -567,7 +668,6 @@ async function loadSettings() {
 
 async function saveSettings() {
   const updates = [
-    { key: 'ai_provider', value: document.getElementById('settingAiProvider').value },
     { key: 'gemini_api_key', value: document.getElementById('settingGeminiKey').value },
     { key: 'local_ai_endpoint', value: document.getElementById('settingLocalEndpoint').value },
     { key: 'local_model_name', value: document.getElementById('settingLocalModel').value },
