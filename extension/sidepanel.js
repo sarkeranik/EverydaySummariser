@@ -18,7 +18,7 @@ function showToast(msg, dur = 2000) {
 // Health check
 async function checkHealth() {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/health`, { signal: AbortSignal.timeout(3000) });
+    const res = await apiFetch(`${BACKEND_URL}/api/health`, { signal: AbortSignal.timeout(3000) });
     const data = await res.json();
     if (data.status === 'ok') {
       statusPill.className = 'status-pill online';
@@ -34,7 +34,7 @@ async function checkHealth() {
 // Stats
 async function fetchStats() {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/stats`);
+    const res = await apiFetch(`${BACKEND_URL}/api/stats`);
     const data = await res.json();
     document.getElementById('spTexts').textContent = data.texts || 0;
     document.getElementById('spImages').textContent = data.images || 0;
@@ -51,7 +51,7 @@ document.getElementById('spGenerateBtn').addEventListener('click', async () => {
   result.className = 'result-box';
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/generate-daily-note`, { method: 'POST' });
+    const res = await apiFetch(`${BACKEND_URL}/api/generate-daily-note`, { method: 'POST' });
     const data = await res.json();
     if (data.status === 'success') {
       result.textContent = `✅ Saved: ${data.relative_path}`;
@@ -95,7 +95,7 @@ document.getElementById('spClearBtn').addEventListener('click', async () => {
   btn.textContent = '⏳ Clearing...';
   btn.disabled = true;
   try {
-    const res = await fetch(`${BACKEND_URL}/api/clear-today`, { method: 'POST' });
+    const res = await apiFetch(`${BACKEND_URL}/api/clear-today`, { method: 'POST' });
     const data = await res.json();
     if (data.status === 'success') {
       const total = Object.values(data.deleted).reduce((a, b) => a + b, 0);

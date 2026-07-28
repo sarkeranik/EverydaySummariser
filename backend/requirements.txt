@@ -8,3 +8,5 @@ python-dotenv
 python-multipart
 apscheduler
 trafilatura
+faster-whisper
+fastembed

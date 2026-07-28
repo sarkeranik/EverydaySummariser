@@ -71,7 +71,7 @@ document.getElementById('testConnectionBtn').addEventListener('click', async () 
   resultEl.textContent = '⏳ Testing connection...';
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/health`, {
+    const res = await apiFetch(`${BACKEND_URL}/api/health`, {
       signal: AbortSignal.timeout(5000)
     });
     const data = await res.json();
@@ -81,7 +81,7 @@ document.getElementById('testConnectionBtn').addEventListener('click', async () 
       resultEl.textContent = `✅ Connected! Backend v${data.version} is running.`;
       
       try {
-        const setRes = await fetch(`${BACKEND_URL}/api/settings`);
+        const setRes = await apiFetch(`${BACKEND_URL}/api/settings`);
         const setData = await setRes.json();
         window.onboardSettings = setData.settings || {};
         
@@ -117,7 +117,7 @@ async function saveAiConfig() {
 
   try {
     if (updates.length > 0) {
-      await fetch(`${BACKEND_URL}/api/settings`, {
+      await apiFetch(`${BACKEND_URL}/api/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
@@ -137,7 +137,7 @@ async function savePrivacyConfig() {
 
   // Save to backend settings
   try {
-    await fetch(`${BACKEND_URL}/api/settings`, {
+    await apiFetch(`${BACKEND_URL}/api/settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify([{ key: 'domain_blocklist', value: blocklist }])

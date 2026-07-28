@@ -440,6 +440,15 @@
       </div>
     </div>
 
+    <!-- Temporary pause: stop capturing without having to remember to switch it back on -->
+    <div class="actions-row" style="margin-top:8px;">
+      <div class="action-card" style="justify-content:center; gap:6px;">
+        <button class="launcher-btn" id="pause30" style="flex:1;">⏸ 30m</button>
+        <button class="launcher-btn" id="pause60" style="flex:1;">⏸ 1h</button>
+        <button class="launcher-btn" id="resumeBtn" style="flex:1; display:none;">▶ Resume</button>
+      </div>
+    </div>
+
     <!-- Launchers -->
     <div class="launchers">
       <button class="launcher-btn" id="openDashboard">📊 Dashboard</button>
@@ -457,6 +466,7 @@
   <!-- Toast -->
   <div class="tooltip" id="tooltip"></div>
 
+  <script src="api.js"></script>
   <script src="theme.js"></script>
   <script src="popup.js"></script>
 </body>

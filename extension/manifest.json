@@ -10,8 +10,16 @@
     "tabCapture",
     "scripting",
     "offscreen",
-    "sidePanel"
+    "sidePanel",
+    "alarms",
+    "contextMenus",
+    "notifications",
+    "history"
   ],
+  "incognito": "not_allowed",
+  "omnibox": {
+    "keyword": "es"
+  },
   "host_permissions": [
     "<all_urls>",
     "http://localhost:8000/*"
@@ -52,6 +60,15 @@
       "run_at": "document_idle"
     }
   ],
+  "commands": {
+    "save-highlight": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Save the selected text to your journal"
+    }
+  },
   "action": {
     "default_popup": "popup.html",
     "default_title": "Everyday Summariser",

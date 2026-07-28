@@ -17,6 +17,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
   initNavigation();
   initSearch();
+  initAsk();
+  initInsights();
+  initExportImport();
   initDataBrowser();
   initTags();
   initGenerate();
@@ -41,7 +44,7 @@ let _dashAiReady = false;
 
 async function checkHealth() {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/health`, { signal: AbortSignal.timeout(3000) });
+    const res = await apiFetch(`${BACKEND_URL}/api/health`, { signal: AbortSignal.timeout(3000) });
     const data = await res.json();
     if (data.status === 'ok') {
       statusPill.className = 'status-pill online';
@@ -145,12 +148,14 @@ function navigateTo(page) {
   if (page === 'browser') loadDataBrowser();
   if (page === 'tags') loadTags();
   if (page === 'settings') loadSettings();
+  if (page === 'insights') loadInsights(parseInt(document.getElementById('insightsRange').value, 10));
+  if (page === 'ask') refreshIndexStatus();
 }
 
 // ─── Stats ──────────────────────────────────────────────────────────────────
 async function fetchStats() {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/stats`);
+    const res = await apiFetch(`${BACKEND_URL}/api/stats`);
     const data = await res.json();
     animateNumber('dashStatTexts', data.texts || 0);
     animateNumber('dashStatImages', data.images || 0);
@@ -182,7 +187,7 @@ function animateNumber(elementId, target) {
 async function fetchRecentNotes() {
   const container = document.getElementById('recentNotes');
   try {
-    const res = await fetch(`${BACKEND_URL}/api/notes?limit=5`);
+    const res = await apiFetch(`${BACKEND_URL}/api/notes?limit=5`);
     const data = await res.json();
     if (data.notes && data.notes.length > 0) {
       container.innerHTML = data.notes.map(n => `
@@ -277,7 +282,7 @@ async function viewNote(noteDate) {
   const content = document.getElementById('noteContent');
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/notes/${noteDate}`);
+    const res = await apiFetch(`${BACKEND_URL}/api/notes/${noteDate}`);
     const data = await res.json();
 
     if (data.note) {
@@ -314,7 +319,7 @@ async function doSearch(query) {
   container.innerHTML = '<div class="loading-text">Searching...</div>';
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/search?q=${encodeURIComponent(query)}`);
+    const res = await apiFetch(`${BACKEND_URL}/api/search?q=${encodeURIComponent(query)}`);
     const data = await res.json();
 
     if (data.results && data.results.length > 0) {
@@ -340,6 +345,223 @@ async function doSearch(query) {
   }
 }
 
+// ─── Export & History Import ───────────────────────────────────────────────
+
+function initExportImport() {
+  const exportBtn = document.getElementById('exportBtn');
+  const backfillBtn = document.getElementById('backfillBtn');
+
+  exportBtn.addEventListener('click', async () => {
+    const pathInput = document.getElementById('exportPath');
+    const result = document.getElementById('exportResult');
+    const dest = pathInput.value.trim();
+
+    if (!dest) {
+      result.textContent = 'Enter a destination folder first.';
+      return;
+    }
+
+    exportBtn.disabled = true;
+    result.textContent = 'Exporting...';
+    try {
+      const res = await apiFetch(`${BACKEND_URL}/api/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dest_path: dest }),
+      });
+      const data = await res.json();
+      result.textContent = data.status === 'success'
+        ? `✅ Wrote ${data.written} file(s) to ${data.dest}`
+        : `❌ ${data.detail || data.message || 'Export failed'}`;
+    } catch {
+      result.textContent = '❌ Export failed — is the backend running?';
+    } finally {
+      exportBtn.disabled = false;
+    }
+  });
+
+  backfillBtn.addEventListener('click', () => {
+    const result = document.getElementById('backfillResult');
+    backfillBtn.disabled = true;
+    result.textContent = 'Importing...';
+
+    // The service worker owns this: chrome.history isn't available to this page.
+    chrome.runtime.sendMessage({ type: 'BACKFILL_HISTORY', days: 30 }, (data) => {
+      backfillBtn.disabled = false;
+      if (!data || data.status !== 'success') {
+        result.textContent = `❌ ${data?.message || 'Import failed'}`;
+        return;
+      }
+      result.textContent = `✅ Imported ${data.imported}, skipped ${data.skipped} (already known)`;
+      fetchStats();
+    });
+  });
+}
+
+// ─── Insights ──────────────────────────────────────────────────────────────
+
+function initInsights() {
+  const range = document.getElementById('insightsRange');
+  // Data loads when the page is opened (see switchPage), not on dashboard boot.
+  range.addEventListener('change', () => loadInsights(parseInt(range.value, 10)));
+}
+
+function formatDuration(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  return `${(seconds / 3600).toFixed(1)}h`;
+}
+
+async function loadInsights(days) {
+  const summary = document.getElementById('insightsSummary');
+  const bars = document.getElementById('domainBars');
+  const queue = document.getElementById('readingQueue');
+
+  summary.innerHTML = '<div class="loading-text">Loading...</div>';
+
+  try {
+    const [aRes, qRes] = await Promise.all([
+      apiFetch(`${BACKEND_URL}/api/analytics?days=${days}`),
+      apiFetch(`${BACKEND_URL}/api/reading-queue?days=${days}`),
+    ]);
+    const a = await aRes.json();
+    const q = await qRes.json();
+
+    summary.innerHTML = `
+      <div class="stats-grid-dash">
+        <div class="stat-box">
+          <span class="stat-emoji">📄</span>
+          <span class="stat-number">${a.total_pages}</span>
+          <span class="stat-name">Pages</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-emoji">⏱️</span>
+          <span class="stat-number">${formatDuration(a.total_seconds)}</span>
+          <span class="stat-name">Reading time</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-emoji">🌐</span>
+          <span class="stat-number">${a.by_domain.length}</span>
+          <span class="stat-name">Sites</span>
+        </div>
+      </div>
+    `;
+
+    // Bars are plain divs: the extension CSP forbids loading a charting library.
+    const max = Math.max(1, ...a.by_domain.map(d => d.seconds));
+    bars.innerHTML = a.by_domain.length ? a.by_domain.map(d => `
+      <div style="margin-bottom:8px;">
+        <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px;">
+          <span>${escapeHtml(d.domain)}</span>
+          <span>${formatDuration(d.seconds)} · ${d.pages} pages</span>
+        </div>
+        <div style="background:rgba(124,58,237,0.15); height:10px;">
+          <div style="background:#7c3aed; height:10px; width:${Math.round((d.seconds / max) * 100)}%;"></div>
+        </div>
+      </div>
+    `).join('') : '<div class="empty-desc">No page data in this range.</div>';
+
+    queue.innerHTML = q.items && q.items.length ? q.items.map(item => `
+      <div class="search-result-item">
+        <div class="search-result-type">${item.words} words · only ${item.seconds}s spent</div>
+        <div class="search-result-title">
+          <a href="${escapeHtml(item.url)}" target="_blank">${escapeHtml(item.title || item.url)}</a>
+        </div>
+      </div>
+    `).join('') : '<div class="empty-desc">Nothing pending — you finished what you opened.</div>';
+
+  } catch {
+    summary.innerHTML = '<div class="empty-state"><div class="empty-title">Could not load insights</div></div>';
+  }
+}
+
+// ─── Ask Your History ──────────────────────────────────────────────────────
+
+function initAsk() {
+  const input = document.getElementById('askInput');
+  const btn = document.getElementById('askBtn');
+
+  btn.addEventListener('click', () => doAsk(input.value));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') doAsk(input.value);
+  });
+
+  refreshIndexStatus();
+}
+
+async function refreshIndexStatus() {
+  const line = document.getElementById('indexStatusLine');
+  if (!line) return;
+  try {
+    const res = await apiFetch(`${BACKEND_URL}/api/index-status`);
+    const data = await res.json();
+    line.textContent = data.total_chunks
+      ? `${data.total_chunks} chunks indexed.`
+      : 'Nothing indexed yet — the indexer runs every 5 minutes.';
+  } catch {
+    line.textContent = '';
+  }
+}
+
+const SOURCE_ICONS = {
+  text: '📝', note: '📖', youtube: '🎬', pdf: '📄',
+  twitter: '🐦', highlight: '⭐', audio: '🎧'
+};
+
+function renderSources(sources) {
+  return sources.map((s, i) => `
+    <div class="search-result-item">
+      <div class="search-result-type">
+        [${i + 1}] ${SOURCE_ICONS[s.source_type] || '📄'} ${s.source_type}
+        · ${(s.score * 100).toFixed(0)}% match
+        ${s.timestamp ? '· ' + s.timestamp.slice(0, 10) : ''}
+      </div>
+      <div class="search-result-title">${escapeHtml(s.title || s.url || 'Untitled')}</div>
+      <div class="search-result-snippet">${escapeHtml(s.chunk_text.slice(0, 240))}...</div>
+    </div>
+  `).join('');
+}
+
+async function doAsk(question) {
+  const container = document.getElementById('askResults');
+  if (!question.trim()) return;
+
+  container.innerHTML = '<div class="loading-text">Searching your history and thinking...</div>';
+
+  try {
+    const res = await apiFetch(`${BACKEND_URL}/api/ask?q=${encodeURIComponent(question)}`, { method: 'POST' });
+    const data = await res.json();
+
+    if (data.status === 'success') {
+      container.innerHTML = `
+        <div class="note-content">${markdownToHtml(data.answer)}</div>
+        <h3 style="margin:18px 0 8px;">Sources</h3>
+        ${renderSources(data.sources)}
+      `;
+    } else if (data.status === 'partial') {
+      // Retrieval worked, the model did not — the sources are still worth showing.
+      container.innerHTML = `
+        <div class="empty-state" style="padding:16px;">
+          <div class="empty-title">Couldn't generate an answer</div>
+          <div class="empty-desc">${escapeHtml(data.message || '')}</div>
+        </div>
+        <h3 style="margin:18px 0 8px;">Closest matches in your history</h3>
+        ${renderSources(data.sources || [])}
+      `;
+    } else {
+      container.innerHTML = `
+        <div class="empty-state">
+          <span class="empty-icon">🤔</span>
+          <div class="empty-title">No answer</div>
+          <div class="empty-desc">${escapeHtml(data.message || 'Nothing matched.')}</div>
+        </div>
+      `;
+    }
+  } catch {
+    container.innerHTML = '<div class="empty-state"><div class="empty-title">Ask failed — is the backend running?</div></div>';
+  }
+}
+
 // ─── Raw Data Browser ──────────────────────────────────────────────────────
 let currentDataType = 'text';
 let currentDataPage = 0;
@@ -361,18 +583,20 @@ async function loadDataBrowser() {
   container.innerHTML = '<div class="loading-text" style="padding:20px;">Loading...</div>';
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/captured?type=${currentDataType}&limit=30&offset=${currentDataPage * 30}`);
+    const res = await apiFetch(`${BACKEND_URL}/api/captured?type=${currentDataType}&limit=30&offset=${currentDataPage * 30}`);
     const data = await res.json();
 
     if (data.items && data.items.length > 0) {
-      const typeEmojis = { text: '📝', images: '🖼️', audio: '🎵', youtube: '🎬', pdf: '📄', twitter: '🐦' };
+      const typeEmojis = { text: '📝', images: '🖼️', audio: '🎵', youtube: '🎬', pdf: '📄', twitter: '🐦', highlights: '⭐' };
       container.innerHTML = data.items.map(item => {
-        const title = item.title || item.filename || item.video_id || item.author || item.image_url || 'Unknown';
+        const title = item.selected_text || item.title || item.filename || item.video_id || item.author || item.image_url || 'Unknown';
         const url = item.url || '';
         const time = item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : '';
         let meta = '';
         if (item.extraction_method) meta += `Method: ${item.extraction_method}`;
+        if (item.visit_count > 1) meta += ` | Visits: ${item.visit_count}`;
         if (item.dwell_time_ms) meta += ` | Dwell: ${(item.dwell_time_ms / 1000).toFixed(1)}s`;
+        if (item.transcript_status) meta += `Transcript: ${item.transcript_status}`;
         if (item.page_count) meta += `Pages: ${item.page_count}`;
         if (item.tweet_count) meta += `Tweets: ${item.tweet_count}`;
         if (item.duration_seconds) meta += `Duration: ${Math.floor(item.duration_seconds / 60)}m`;
@@ -438,8 +662,8 @@ async function loadTags() {
 
   try {
     const [tagsRes, pagesRes] = await Promise.all([
-      fetch(`${BACKEND_URL}/api/tags`),
-      fetch(`${BACKEND_URL}/api/tagged-pages`)
+      apiFetch(`${BACKEND_URL}/api/tags`),
+      apiFetch(`${BACKEND_URL}/api/tagged-pages`)
     ]);
     const tagsData = await tagsRes.json();
     const pagesData = await pagesRes.json();
@@ -483,7 +707,7 @@ async function createTag() {
   if (!name) { showToast('Enter a tag name!'); return; }
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/tags`, {
+    const res = await apiFetch(`${BACKEND_URL}/api/tags`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, color })
@@ -503,7 +727,7 @@ async function createTag() {
 
 async function deleteTag(tagId) {
   try {
-    await fetch(`${BACKEND_URL}/api/tags/${tagId}`, { method: 'DELETE' });
+    await apiFetch(`${BACKEND_URL}/api/tags/${tagId}`, { method: 'DELETE' });
     showToast('🗑️ Tag deleted');
     loadTags();
   } catch {
@@ -513,7 +737,7 @@ async function deleteTag(tagId) {
 
 async function untagPage(pageTagId) {
   try {
-    await fetch(`${BACKEND_URL}/api/tag-page/${pageTagId}`, { method: 'DELETE' });
+    await apiFetch(`${BACKEND_URL}/api/tag-page/${pageTagId}`, { method: 'DELETE' });
     showToast('🏷️ Tag removed');
     loadTags();
   } catch {
@@ -545,7 +769,7 @@ async function generateNote(type) {
   };
 
   try {
-    const res = await fetch(`${BACKEND_URL}${endpoints[type]}`, { method: 'POST' });
+    const res = await apiFetch(`${BACKEND_URL}${endpoints[type]}`, { method: 'POST' });
     const data = await res.json();
 
     resultBox.style.display = 'block';
@@ -593,7 +817,7 @@ function initSettings() {
     btn.textContent = '⏳ Checking…';
     btn.disabled = true;
     try {
-      const res = await fetch(`${BACKEND_URL}/api/ai-status`, { signal: AbortSignal.timeout(8000) });
+      const res = await apiFetch(`${BACKEND_URL}/api/ai-status`, { signal: AbortSignal.timeout(8000) });
       const data = await res.json();
       updateSettingsModelStatus(data.ready, data.provider, data.model, data.error);
       // Also refresh the top-bar chip + button gating
@@ -633,7 +857,7 @@ function updateSettingsModelStatus(ready, provider, model, errorMsg) {
 
 async function loadSettings() {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/settings`);
+    const res = await apiFetch(`${BACKEND_URL}/api/settings`);
     const data = await res.json();
     if (data.settings) {
       const s = data.settings;
@@ -652,7 +876,6 @@ async function loadSettings() {
       document.getElementById('settingCaptureAudio').checked = s.capture_audio !== 'false';
 
       // Show/hide local fields
-      const isLocal = s.ai_provider === 'local';
       document.getElementById('geminiKeyRow').style.display = isLocal ? 'none' : 'flex';
       document.getElementById('localEndpointRow').style.display = isLocal ? 'flex' : 'none';
       document.getElementById('localModelRow').style.display = isLocal ? 'flex' : 'none';
@@ -677,7 +900,7 @@ async function saveSettings() {
   ];
 
   try {
-    await fetch(`${BACKEND_URL}/api/settings`, {
+    await apiFetch(`${BACKEND_URL}/api/settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)

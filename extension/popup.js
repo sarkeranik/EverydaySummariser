@@ -40,7 +40,7 @@ let _aiReady = false;
 
 async function checkHealth() {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/health`, { signal: AbortSignal.timeout(3000) });
+    const res = await apiFetch(`${BACKEND_URL}/api/health`, { signal: AbortSignal.timeout(3000) });
     const data = await res.json();
     if (data.status === 'ok') {
       setStatus('online');
@@ -115,7 +115,7 @@ function setAiStatus(ready, provider, model, errorMsg) {
 // ─── Stats ───────────────────────────────────────────────────────────────────
 async function fetchStats() {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/stats`, { signal: AbortSignal.timeout(3000) });
+    const res = await apiFetch(`${BACKEND_URL}/api/stats`, { signal: AbortSignal.timeout(3000) });
     const data = await res.json();
     animateCount(statTexts, data.texts || 0);
     animateCount(statImages, data.images || 0);
@@ -157,7 +157,7 @@ generateBtn.addEventListener('click', async () => {
   resultBox.classList.remove('error');
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/generate-daily-note`, {
+    const res = await apiFetch(`${BACKEND_URL}/api/generate-daily-note`, {
       method: 'POST'
     });
     const data = await res.json();
@@ -223,7 +223,7 @@ clearBtn.addEventListener('click', async () => {
   clearBtn.disabled = true;
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/clear-today`, { method: 'POST' });
+    const res = await apiFetch(`${BACKEND_URL}/api/clear-today`, { method: 'POST' });
     const data = await res.json();
     if (data.status === 'success') {
       const total = Object.values(data.deleted).reduce((a, b) => a + b, 0);
@@ -247,8 +247,39 @@ document.getElementById('openSidepanel').addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'OPEN_SIDEPANEL' });
 });
 
+// ─── Temporary Pause ─────────────────────────────────────────────────────────
+
+function pauseFor(minutes) {
+  chrome.runtime.sendMessage({ type: 'PAUSE_CAPTURE', minutes });
+  showToast(`⏸ Paused for ${minutes} minutes`);
+  refreshPauseUi(Date.now() + minutes * 60 * 1000);
+}
+
+function refreshPauseUi(pauseUntil) {
+  const paused = pauseUntil && Date.now() < pauseUntil;
+  document.getElementById('pause30').style.display = paused ? 'none' : '';
+  document.getElementById('pause60').style.display = paused ? 'none' : '';
+  document.getElementById('resumeBtn').style.display = paused ? '' : 'none';
+
+  if (paused) {
+    const mins = Math.ceil((pauseUntil - Date.now()) / 60000);
+    document.getElementById('captureStatus').textContent = `Paused (${mins}m left)`;
+  }
+}
+
+document.getElementById('pause30').addEventListener('click', () => pauseFor(30));
+document.getElementById('pause60').addEventListener('click', () => pauseFor(60));
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ type: 'RESUME_CAPTURE' });
+  showToast('▶ Capture resumed');
+  refreshPauseUi(null);
+});
+
 // ─── Initialize ──────────────────────────────────────────────────────────────
 async function init() {
+  const { pauseUntil } = await chrome.storage.local.get('pauseUntil');
+  refreshPauseUi(pauseUntil);
+
   const online = await checkHealth();
   if (online) {
     fetchStats();

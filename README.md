@@ -15,7 +15,9 @@ The end result is a beautifully formatted, private Markdown journal generated ri
 ### 🎯 Smart Content Capture
 - **Readability-Based Extraction**: Uses Mozilla's Readability.js to cleanly extract article text, stripping out ads, navigation, and other noise. Falls back to DOM heuristics and raw text when needed.
 - **Image Context**: Captures source URLs of significant images (filters out tiny tracking pixels and icons).
-- **Audio Capture**: Automatically records audio from tabs that are playing sound.
+- **Audio Capture & Local Transcription**: Records audio from tabs that are playing sound and transcribes it on your machine with `faster-whisper`. Recordings rotate every 10 minutes so each file is a complete, decodable webm.
+- **Highlight to Save**: Select any text and either right-click → *Save highlight to journal* or press `Ctrl+Shift+S`. Saved passages are treated as the highest-signal input and quoted verbatim in your journal.
+- **Engagement-Aware Capture**: A page is recorded once, when you leave it, and only if you actually looked at it for longer than the dwell threshold. Revisits on the same day merge into a single entry with a visit count rather than being counted five times.
 - **YouTube Transcripts**: Automatically pulls captions/transcripts from YouTube videos using the built-in timedtext API.
 - **PDF Extraction**: Captures text from PDFs opened in Chrome using pdf.js.
 - **Twitter/X Threads**: Extracts full thread text from Twitter/X status pages.
@@ -27,6 +29,18 @@ The end result is a beautifully formatted, private Markdown journal generated ri
 - **Time-Based Sections**: Organizes content by Morning / Afternoon / Evening based on timestamps.
 - **Mood & Productivity Analysis**: AI infers focus areas and productivity with a focus score.
 - **Weekly & Monthly Rollups**: Auto-scheduled (Sunday & 1st of month) summaries, plus manual generation anytime.
+
+### 💬 Ask Your History
+- **Semantic Search**: A local embedding index (`fastembed`, ONNX — no torch, no cloud) finds things by *meaning*, so "scheduling reminders" surfaces a podcast you listened to even though those words never appear on any page you read.
+- **Ask with Citations**: Ask a question and get an answer built only from your own browsing, with bracketed citations back to the source. If the AI model is unreachable, the matching sources are still shown.
+- **Omnibox**: Type `es ` followed by a query in the address bar to search your history without opening anything.
+
+### 📊 Insights
+- **Time by Site**: Where attention actually went, from the dwell data already being collected.
+- **Meant to Read**: Long pages you opened but barely looked at — the things you intended to come back to.
+- **Export to Obsidian**: Write every journal and highlight to a vault folder as Markdown with `[[wikilinks]]`.
+- **History Import**: Backfill titles and URLs from recent browsing so a fresh install isn't empty on day one.
+- **Pause Capture**: Stop capturing for 30 or 60 minutes; it resumes on its own.
 
 ### 🔍 Search & Organize
 - **Full-Text Search**: SQLite FTS5-powered search across all captured text, YouTube transcripts, PDFs, Twitter threads, and generated notes.
@@ -43,8 +57,10 @@ The end result is a beautifully formatted, private Markdown journal generated ri
 
 ### 💾 Local & Private
 - All captured data is stored in a local SQLite database (`journal.db`).
-- All processing happens on your machine—no data is ever sent to third parties.
 - Generated notes are saved as Markdown files in `backend/daily_notes/`.
+- **Audio never leaves your machine.** Transcription always runs locally via `faster-whisper`, whichever AI provider you pick.
+- **Summarisation depends on your provider.** With `AI_PROVIDER=local` (Ollama / LM Studio) nothing leaves your machine. With `AI_PROVIDER=gemini`, the excerpts used to build the journal are sent to Google.
+- **The backend is authenticated.** Every `/api` route requires a token the extension fetches automatically from `/api/pair`, which only answers requests from a `chrome-extension://` origin. Without it, any page you visit could read your journal from `localhost:8000` — or wipe it.
 
 ## Repository Structure
 
@@ -111,7 +127,8 @@ If you don't want to use Docker, we've provided scripts to automatically set up 
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/health` | GET | Health check |
+| `/api/health` | GET | Health check (no token required) |
+| `/api/pair` | GET | Returns the API token; only answers `chrome-extension://` origins |
 | `/api/stats` | GET | Today's capture counts |
 | `/api/text` | POST | Save captured page text |
 | `/api/images` | POST | Save captured image URLs |
@@ -119,7 +136,19 @@ If you don't want to use Docker, we've provided scripts to automatically set up 
 | `/api/youtube` | POST | Save YouTube transcript |
 | `/api/pdf` | POST | Save extracted PDF text |
 | `/api/twitter` | POST | Save Twitter thread text |
-| `/api/search?q=...` | GET | Full-text search |
+| `/api/highlights` | GET/POST | List or save explicitly highlighted passages |
+| `/api/highlights/{id}` | DELETE | Delete a highlight |
+| `/api/transcription-status` | GET | Transcription queue counts by status |
+| `/api/transcribe-now` | POST | Drain the transcription queue immediately |
+| `/api/semantic-search?q=...` | GET | Meaning-based search over the embedding index |
+| `/api/ask?q=...` | POST | Answer a question from your history, with citations |
+| `/api/index-status` | GET | Embedding index chunk counts |
+| `/api/index-now` | POST | Index new content immediately |
+| `/api/analytics?days=N` | GET | Time by site, by day, and top pages |
+| `/api/reading-queue` | GET | Long pages you opened but barely read |
+| `/api/backfill-history` | POST | Import browser history (metadata only) |
+| `/api/export` | POST | Export notes and highlights as Markdown |
+| `/api/search?q=...` | GET | Full-text search (includes highlights and transcripts) |
 | `/api/notes` | GET | List all generated notes |
 | `/api/notes/{date}` | GET | Get a specific note |
 | `/api/tags` | GET/POST | List/create tags |

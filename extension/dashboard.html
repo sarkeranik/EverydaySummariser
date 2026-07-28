@@ -45,6 +45,10 @@
           <span class="nav-icon">🔍</span>
           <span>Search</span>
         </div>
+        <div class="nav-item" data-page="ask">
+          <span class="nav-icon">💬</span>
+          <span>Ask</span>
+        </div>
       </div>
       <div class="nav-section">
         <div class="nav-section-title">Data</div>
@@ -55,6 +59,10 @@
         <div class="nav-item" data-page="tags">
           <span class="nav-icon">🏷️</span>
           <span>Tags</span>
+        </div>
+        <div class="nav-item" data-page="insights">
+          <span class="nav-icon">📊</span>
+          <span>Insights</span>
         </div>
       </div>
       <div class="nav-section">
@@ -177,6 +185,60 @@
         </div>
       </section>
 
+      <!-- ── Insights ── -->
+      <section class="page-section" id="page-insights">
+        <div class="page-header">
+          <h1 class="page-title">📊 Insights</h1>
+          <p class="page-subtitle">Where your attention actually went</p>
+        </div>
+
+        <div class="search-container" style="margin-bottom:16px;">
+          <select id="insightsRange" class="search-input" style="max-width:220px;">
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+        </div>
+
+        <div id="insightsSummary"></div>
+
+        <h3 style="margin:20px 0 10px;">Time by site</h3>
+        <div id="domainBars"></div>
+
+        <h3 style="margin:24px 0 10px;">📥 Meant to read</h3>
+        <p class="page-subtitle" style="margin-bottom:10px;">
+          Long pages you opened but barely looked at
+        </p>
+        <div id="readingQueue"></div>
+      </section>
+
+      <!-- ── Ask Your History ── -->
+      <section class="page-section" id="page-ask">
+        <div class="page-header">
+          <h1 class="page-title">💬 Ask Your History</h1>
+          <p class="page-subtitle">Ask a question and get an answer from what you've actually read</p>
+        </div>
+
+        <div class="search-container">
+          <div class="search-input-wrap">
+            <input type="text" class="search-input" id="askInput"
+                   placeholder="e.g. what was that article about database locking?">
+            <button class="search-btn" id="askBtn">Ask</button>
+          </div>
+        </div>
+
+        <div class="search-results" id="askResults">
+          <div class="empty-state">
+            <span class="empty-icon">🧠</span>
+            <div class="empty-title">Ask anything you've browsed</div>
+            <div class="empty-desc">
+              Unlike Search, this matches on meaning rather than exact words, then answers with citations.
+              <br><span id="indexStatusLine"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ── Raw Data Browser ── -->
       <section class="page-section" id="page-browser">
         <div class="page-header">
@@ -191,6 +253,7 @@
           <div class="data-tab" data-type="youtube">🎬 YouTube</div>
           <div class="data-tab" data-type="pdf">📄 PDFs</div>
           <div class="data-tab" data-type="twitter">🐦 Twitter</div>
+          <div class="data-tab" data-type="highlights">⭐ Highlights</div>
         </div>
 
         <div class="data-list" id="dataList">
@@ -371,6 +434,32 @@
             <span class="loading-text" id="settingsSaved" style="display:none; margin-left: 12px;">Saved!</span>
           </div>
         </div>
+
+        <div class="settings-group" style="margin-top:20px;">
+          <h3 style="margin-bottom:10px;">📤 Export to Markdown / Obsidian</h3>
+          <p class="page-subtitle" style="margin-bottom:10px;">
+            Writes every journal (and your highlights) as Markdown files with
+            <code>[[wikilinks]]</code> — point it at an Obsidian vault folder.
+          </p>
+          <input type="text" class="search-input" id="exportPath"
+                 placeholder="C:\Users\you\Documents\MyVault">
+          <div style="margin-top:10px;">
+            <button class="pixel-btn primary" id="exportBtn">📤 Export Now</button>
+            <span class="loading-text" id="exportResult" style="margin-left:12px;"></span>
+          </div>
+        </div>
+
+        <div class="settings-group" style="margin-top:20px;">
+          <h3 style="margin-bottom:10px;">📥 Import Browser History</h3>
+          <p class="page-subtitle" style="margin-bottom:10px;">
+            Imports titles and URLs from your recent browsing so the journal isn't
+            empty on day one. Page text is not re-fetched, and your blocklist is respected.
+          </p>
+          <div>
+            <button class="pixel-btn" id="backfillBtn">📥 Import last 30 days</button>
+            <span class="loading-text" id="backfillResult" style="margin-left:12px;"></span>
+          </div>
+        </div>
       </section>
 
     </main>
@@ -379,6 +468,7 @@
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
+  <script src="api.js"></script>
   <script src="theme.js"></script>
   <script src="dashboard.js"></script>
 </body>

@@ -1,7 +1,7 @@
 import os
 from sqlalchemy import (
     create_engine, Column, Integer, String, Text, DateTime, Float,
-    ForeignKey, event, text
+    ForeignKey, LargeBinary, UniqueConstraint, event, text
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from datetime import datetime
@@ -23,8 +23,11 @@ class CapturedText(Base):
     url = Column(String, index=True)
     title = Column(String)
     content = Column(Text)
-    dwell_time_ms = Column(Integer, default=0)  # time spent on page in milliseconds
+    dwell_time_ms = Column(Integer, default=0)  # accumulated *visible* time in milliseconds
     extraction_method = Column(String, default="raw")  # readability, heuristic, raw, server
+    content_hash = Column(String, index=True)  # sha256 of normalised content, for per-day dedup
+    url_norm = Column(String, index=True)  # url minus fragment and tracking params
+    visit_count = Column(Integer, default=1)  # revisits merge into one row per day
     timestamp = Column(DateTime, default=datetime.utcnow)
 
 class CapturedImage(Base):
@@ -40,6 +43,12 @@ class CapturedAudio(Base):
     id = Column(Integer, primary_key=True, index=True)
     url = Column(String, index=True)
     filename = Column(String)  # path to local audio file
+    session_id = Column(String, index=True)  # groups rotations of one listening session
+    seq = Column(Integer, default=0)  # rotation order within the session
+    transcript = Column(Text)
+    transcript_status = Column(String, default="pending")  # pending|running|done|failed|skipped
+    transcript_error = Column(Text)
+    duration_seconds = Column(Float, default=0)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
 
@@ -75,6 +84,18 @@ class CapturedTwitterThread(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
 
+# ─── Highlights (explicit user saves) ───────────────────────────────────────
+
+class Highlight(Base):
+    __tablename__ = "highlights"
+    id = Column(Integer, primary_key=True, index=True)
+    url = Column(String, index=True)
+    title = Column(String, default="")
+    selected_text = Column(Text)
+    note = Column(Text, default="")  # optional user annotation
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+
 # ─── Daily / Weekly / Monthly Notes ─────────────────────────────────────────
 
 class DailyNote(Base):
@@ -107,6 +128,32 @@ class PageTag(Base):
     tag = relationship("Tag", back_populates="pages")
 
 
+# ─── Semantic Index ──────────────────────────────────────────────────────────
+
+class Embedding(Base):
+    """
+    One row per chunk of captured content. Vectors are stored as raw float32
+    bytes: at this corpus size a brute-force numpy scan takes milliseconds, so a
+    vector database (and its binary dependency) would buy nothing.
+    """
+    __tablename__ = "embeddings"
+    __table_args__ = (
+        UniqueConstraint("source_type", "source_id", "chunk_index", name="uq_embedding_chunk"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_type = Column(String, index=True)  # text|youtube|pdf|twitter|highlight|audio|note
+    source_id = Column(Integer, index=True)
+    chunk_index = Column(Integer, default=0)
+    chunk_text = Column(Text)
+    title = Column(String, default="")
+    url = Column(String, default="")
+    vector = Column(LargeBinary)
+    dim = Column(Integer, default=0)
+    source_timestamp = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # ─── User Settings ───────────────────────────────────────────────────────────
 
 class UserSettings(Base):
@@ -117,8 +164,17 @@ class UserSettings(Base):
 
 
 # ─── Create Tables ───────────────────────────────────────────────────────────
+# Order matters: create_all adds new tables, then migrations alter pre-existing
+# ones (create_all cannot), then the FTS virtual tables are ensured.
 
 Base.metadata.create_all(bind=engine)
+
+from migrations import run_migrations  # noqa: E402  (must follow create_all)
+
+try:
+    run_migrations(engine)
+except Exception as e:
+    print(f"Warning: migrations failed: {e}")
 
 
 # ─── FTS5 Virtual Tables ────────────────────────────────────────────────────
@@ -151,6 +207,18 @@ def create_fts_tables(engine):
         conn.execute(text("""
             CREATE VIRTUAL TABLE IF NOT EXISTS captured_twitter_fts
             USING fts5(author, thread_text, content='captured_twitter', content_rowid='id')
+        """))
+        # Highlights and transcripts are indexed as ordinary (non external-content)
+        # FTS5 tables: rows here are deleted and re-inserted when a highlight is
+        # removed or a recording is re-transcribed, and plain DELETE is only valid
+        # on a standalone FTS table.
+        conn.execute(text("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS highlights_fts
+            USING fts5(title, selected_text, note)
+        """))
+        conn.execute(text("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS captured_audio_fts
+            USING fts5(url, transcript)
         """))
         conn.commit()
 

@@ -1,14 +1,18 @@
 import os
 import json
 import glob
+import hashlib
+import secrets
 import requests
 from datetime import datetime, date, timedelta
-from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException, Query
+from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, Date, text, desc
 from pydantic import BaseModel
 from typing import List, Optional
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,12 +21,92 @@ from database import (
     SessionLocal, engine,
     CapturedText, CapturedImage, CapturedAudio,
     CapturedYouTube, CapturedPDF, CapturedTwitterThread,
-    DailyNote, Tag, PageTag, UserSettings
+    DailyNote, Tag, PageTag, UserSettings, Highlight
 )
+import transcription
+import embeddings
 
 app = FastAPI(title="Everyday Summariser API", version="2.0.0")
 
-# Allow CORS from the Chrome extension
+
+# ─── Dependency ──────────────────────────────────────────────────────────────
+# Defined before the routes below because Depends(get_db) is evaluated when each
+# endpoint function is defined, not when it is called.
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# ─── Extension Authentication ───────────────────────────────────────────────
+# Any web page you visit can reach http://localhost:8000. Requiring a custom
+# header on every /api route means a page cannot read your journal *or* blindly
+# POST to it: a custom header forces a CORS preflight, which it cannot satisfy
+# without knowing the token.
+
+AUTH_EXEMPT_PATHS = {"/api/health", "/api/pair"}
+
+
+def get_or_create_token(db: Session) -> str:
+    """Return the persisted API token, generating one on first use."""
+    row = db.query(UserSettings).filter(UserSettings.key == "api_token").first()
+    if row and row.value:
+        return row.value
+
+    token = secrets.token_urlsafe(32)
+    if row:
+        row.value = token
+    else:
+        db.add(UserSettings(key="api_token", value=token))
+    db.commit()
+    return token
+
+
+@app.middleware("http")
+async def enforce_token(request: Request, call_next):
+    path = request.url.path
+
+    # Preflights are answered by the CORS layer; non-API paths (/docs) are local-only.
+    if request.method == "OPTIONS" or not path.startswith("/api/") or path in AUTH_EXEMPT_PATHS:
+        return await call_next(request)
+
+    db = SessionLocal()
+    try:
+        expected = get_or_create_token(db)
+    finally:
+        db.close()
+
+    presented = request.headers.get("x-es-token", "")
+    if not secrets.compare_digest(presented, expected):
+        return JSONResponse(
+            {"status": "error", "message": "Missing or invalid X-ES-Token. Re-pair the extension."},
+            status_code=401,
+        )
+
+    return await call_next(request)
+
+
+@app.get("/api/pair")
+def pair(request: Request, db: Session = Depends(get_db)):
+    """
+    Hand the token to the extension. Only reachable from an extension context:
+    the browser sets the Origin header itself, so a web page cannot forge
+    chrome-extension:// and steal the token.
+    """
+    origin = request.headers.get("origin", "")
+    if not origin.startswith("chrome-extension://"):
+        raise HTTPException(status_code=403, detail="Pairing is only allowed from the extension.")
+
+    return {"status": "success", "token": get_or_create_token(db)}
+
+
+# Allow CORS from the Chrome extension.
+# Added last so it is the OUTERMOST middleware — otherwise a 401 from
+# enforce_token would carry no CORS headers and the extension would see an
+# opaque network failure instead of a status it can act on.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -34,16 +118,6 @@ app.add_middleware(
 # Ensure folders exist
 os.makedirs("audio_uploads", exist_ok=True)
 os.makedirs("daily_notes", exist_ok=True)
-
-
-# ─── Dependency ──────────────────────────────────────────────────────────────
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # ─── Pydantic Models ─────────────────────────────────────────────────────────
@@ -93,6 +167,22 @@ class PageTagRequest(BaseModel):
 class SettingUpdate(BaseModel):
     key: str
     value: str
+
+class HighlightRequest(BaseModel):
+    url: str = ""
+    title: str = ""
+    selected_text: str
+    note: str = ""
+
+class HistoryItem(BaseModel):
+    url: str
+    title: str = ""
+    visit_count: int = 1
+    last_visit_ms: float = 0
+
+class ExportRequest(BaseModel):
+    dest_path: str
+    include_highlights: bool = True
 
 
 # ─── Health Check ────────────────────────────────────────────────────────────
@@ -225,6 +315,14 @@ def get_stats(db: Session = Depends(get_db)):
         CapturedTwitterThread.timestamp >= today_start
     ).scalar() or 0
 
+    highlights = db.query(func.count(Highlight.id)).filter(
+        Highlight.timestamp >= today_start
+    ).scalar() or 0
+
+    pending_transcripts = db.query(func.count(CapturedAudio.id)).filter(
+        CapturedAudio.transcript_status.in_(["pending", "running"])
+    ).scalar() or 0
+
     return {
         "texts": texts,
         "images": images,
@@ -232,6 +330,8 @@ def get_stats(db: Session = Depends(get_db)):
         "youtubes": youtubes,
         "pdfs": pdfs,
         "tweets": tweets,
+        "highlights": highlights,
+        "pending_transcripts": pending_transcripts,
         "date": date.today().isoformat()
     }
 
@@ -298,6 +398,33 @@ def update_fts_index(db, table_name, row_id, columns_dict):
         print(f"FTS index update warning: {e}")
 
 
+# Params that identify a campaign, not a page. Anything else (?v= on YouTube,
+# ?q= on a search) is part of the page's identity and must be preserved.
+TRACKING_PARAMS = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "fbclid", "gclid", "msclkid", "mc_cid", "mc_eid", "igshid", "ref_src",
+}
+
+
+def normalize_url(url: str) -> str:
+    """Drop the fragment and known tracking params so revisits collapse."""
+    try:
+        parts = urlsplit(url)
+        query = [
+            (k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+            if k.lower() not in TRACKING_PARAMS
+        ]
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
+    except Exception:
+        return url
+
+
+def content_fingerprint(content: str) -> str:
+    """sha256 over whitespace-normalised text, so trivial reflow isn't a new page."""
+    normalized = " ".join((content or "").split())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 @app.post("/api/text")
 def save_text(req: TextRequest, db: Session = Depends(get_db)):
     content = req.content
@@ -314,12 +441,34 @@ def save_text(req: TextRequest, db: Session = Depends(get_db)):
         except Exception:
             pass  # keep client-side content
 
+    url_norm = normalize_url(req.url)
+    content_hash = content_fingerprint(content)
+    today_start = datetime.combine(date.today(), datetime.min.time())
+
+    # A revisit on the same day merges into the existing row: re-reading a page
+    # is one entry the user returned to, not N separate entries to summarise.
+    existing = db.query(CapturedText).filter(
+        CapturedText.url_norm == url_norm,
+        CapturedText.content_hash == content_hash,
+        CapturedText.timestamp >= today_start,
+    ).first()
+
+    if existing:
+        existing.visit_count = (existing.visit_count or 1) + 1
+        existing.dwell_time_ms = (existing.dwell_time_ms or 0) + req.dwell_time_ms
+        existing.timestamp = datetime.utcnow()
+        db.commit()
+        return {"status": "merged", "id": existing.id, "visit_count": existing.visit_count}
+
     db_text = CapturedText(
         url=req.url,
         title=req.title,
         content=content,
         dwell_time_ms=req.dwell_time_ms,
         extraction_method=extraction_method,
+        content_hash=content_hash,
+        url_norm=url_norm,
+        visit_count=1,
     )
     db.add(db_text)
     db.commit()
@@ -343,12 +492,24 @@ def save_images(req: List[ImageRequest], db: Session = Depends(get_db)):
 
 
 @app.post("/api/audio")
-async def save_audio(url: str = Form(...), file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def save_audio(
+    url: str = Form(...),
+    file: UploadFile = File(...),
+    session_id: str = Form(""),
+    seq: int = Form(0),
+    db: Session = Depends(get_db),
+):
     filename = f"audio_uploads/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     with open(filename, "wb") as f:
         f.write(await file.read())
 
-    db_audio = CapturedAudio(url=url, filename=filename)
+    db_audio = CapturedAudio(
+        url=url,
+        filename=filename,
+        session_id=session_id,
+        seq=seq,
+        transcript_status="pending",  # picked up by the transcription worker
+    )
     db.add(db_audio)
     db.commit()
     return {"status": "success", "filename": filename}
@@ -422,6 +583,361 @@ def save_twitter(req: TwitterRequest, db: Session = Depends(get_db)):
     return {"status": "success", "id": db_tw.id}
 
 
+# ─── Highlights ─────────────────────────────────────────────────────────────
+
+@app.post("/api/highlights")
+def save_highlight(req: HighlightRequest, db: Session = Depends(get_db)):
+    """Store an explicitly saved passage. The strongest signal the user produces."""
+    selected = (req.selected_text or "").strip()
+    if not selected:
+        raise HTTPException(status_code=400, detail="selected_text is empty")
+
+    db_hl = Highlight(
+        url=req.url,
+        title=req.title,
+        selected_text=selected,
+        note=req.note,
+    )
+    db.add(db_hl)
+    db.commit()
+    db.refresh(db_hl)
+
+    update_fts_index(db, "highlights", db_hl.id, {
+        "title": req.title, "selected_text": selected, "note": req.note
+    })
+
+    return {"status": "success", "id": db_hl.id}
+
+
+@app.get("/api/highlights")
+def list_highlights(
+    date_str: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Highlight).order_by(desc(Highlight.timestamp))
+
+    if date_str:
+        try:
+            target = datetime.strptime(date_str, "%Y-%m-%d").date()
+            day_start = datetime.combine(target, datetime.min.time())
+            day_end = datetime.combine(target + timedelta(days=1), datetime.min.time())
+            query = query.filter(Highlight.timestamp >= day_start, Highlight.timestamp < day_end)
+        except ValueError:
+            pass
+
+    items = query.limit(limit).all()
+    return {
+        "status": "success",
+        "items": [{
+            "id": h.id,
+            "url": h.url,
+            "title": h.title,
+            "selected_text": h.selected_text,
+            "note": h.note,
+            "timestamp": h.timestamp.isoformat() if h.timestamp else None,
+        } for h in items]
+    }
+
+
+@app.delete("/api/highlights/{highlight_id}")
+def delete_highlight(highlight_id: int, db: Session = Depends(get_db)):
+    hl = db.query(Highlight).filter(Highlight.id == highlight_id).first()
+    if not hl:
+        raise HTTPException(status_code=404, detail="Highlight not found")
+    db.delete(hl)
+    db.commit()
+    return {"status": "success"}
+
+
+# ─── Transcription Queue ────────────────────────────────────────────────────
+
+@app.get("/api/transcription-status")
+def transcription_status():
+    return {"status": "success", "queue": transcription.queue_stats()}
+
+
+@app.post("/api/transcribe-now")
+def transcribe_now(limit: int = Query(5, ge=1, le=50)):
+    """Drain the queue immediately instead of waiting for the scheduled tick."""
+    processed = transcription.transcribe_pending(limit=limit)
+    return {"status": "success", "processed": processed, "queue": transcription.queue_stats()}
+
+
+# ─── History Backfill ───────────────────────────────────────────────────────
+
+@app.post("/api/backfill-history")
+def backfill_history(items: List[HistoryItem], db: Session = Depends(get_db)):
+    """
+    Import browser history so a fresh install isn't empty until tomorrow.
+
+    Titles and URLs only — page text is deliberately NOT re-fetched, which would
+    mean silently making hundreds of requests to sites on the user's behalf.
+    """
+    imported = skipped = 0
+
+    for item in items:
+        if not item.url.startswith("http"):
+            skipped += 1
+            continue
+
+        url_norm = normalize_url(item.url)
+        when = (
+            datetime.fromtimestamp(item.last_visit_ms / 1000)
+            if item.last_visit_ms else datetime.utcnow()
+        )
+        day_start = datetime.combine(when.date(), datetime.min.time())
+        day_end = day_start + timedelta(days=1)
+
+        exists = db.query(CapturedText).filter(
+            CapturedText.url_norm == url_norm,
+            CapturedText.timestamp >= day_start,
+            CapturedText.timestamp < day_end,
+        ).first()
+        if exists:
+            skipped += 1
+            continue
+
+        db.add(CapturedText(
+            url=item.url,
+            title=item.title,
+            content="",  # no page text: this is a metadata-only import
+            dwell_time_ms=0,
+            extraction_method="history",
+            content_hash=content_fingerprint(f"history:{url_norm}"),
+            url_norm=url_norm,
+            visit_count=item.visit_count,
+            timestamp=when,
+        ))
+        imported += 1
+
+    db.commit()
+    return {"status": "success", "imported": imported, "skipped": skipped}
+
+
+# ─── Analytics ──────────────────────────────────────────────────────────────
+
+@app.get("/api/analytics")
+def analytics(days: int = Query(7, ge=1, le=365), db: Session = Depends(get_db)):
+    """Where attention actually went, using the dwell and visit data already collected."""
+    since = datetime.combine(date.today() - timedelta(days=days - 1), datetime.min.time())
+    rows = db.query(CapturedText).filter(CapturedText.timestamp >= since).all()
+
+    by_domain, by_day = {}, {}
+    for r in rows:
+        try:
+            domain = urlsplit(r.url or "").netloc.replace("www.", "") or "unknown"
+        except Exception:
+            domain = "unknown"
+
+        entry = by_domain.setdefault(domain, {"domain": domain, "pages": 0, "seconds": 0, "visits": 0})
+        entry["pages"] += 1
+        entry["seconds"] += round((r.dwell_time_ms or 0) / 1000)
+        entry["visits"] += r.visit_count or 1
+
+        day = (r.timestamp or datetime.utcnow()).date().isoformat()
+        day_entry = by_day.setdefault(day, {"date": day, "pages": 0, "seconds": 0})
+        day_entry["pages"] += 1
+        day_entry["seconds"] += round((r.dwell_time_ms or 0) / 1000)
+
+    top_pages = sorted(
+        rows,
+        key=lambda r: ((r.visit_count or 1), (r.dwell_time_ms or 0)),
+        reverse=True,
+    )[:10]
+
+    return {
+        "status": "success",
+        "days": days,
+        "total_pages": len(rows),
+        "total_seconds": sum(d["seconds"] for d in by_domain.values()),
+        "by_domain": sorted(by_domain.values(), key=lambda d: -d["seconds"])[:15],
+        "by_day": sorted(by_day.values(), key=lambda d: d["date"]),
+        "top_pages": [{
+            "title": r.title,
+            "url": r.url,
+            "visits": r.visit_count or 1,
+            "seconds": round((r.dwell_time_ms or 0) / 1000),
+        } for r in top_pages],
+    }
+
+
+@app.get("/api/reading-queue")
+def reading_queue(
+    days: int = Query(7, ge=1, le=90),
+    max_seconds: int = Query(30, ge=5, le=300),
+    db: Session = Depends(get_db),
+):
+    """
+    Pages opened but barely read: substantial content, very little dwell.
+    In other words, the things you meant to come back to.
+    """
+    since = datetime.combine(date.today() - timedelta(days=days - 1), datetime.min.time())
+
+    rows = db.query(CapturedText).filter(
+        CapturedText.timestamp >= since,
+        CapturedText.dwell_time_ms < max_seconds * 1000,
+        CapturedText.extraction_method != "history",
+    ).order_by(desc(CapturedText.timestamp)).limit(100).all()
+
+    items = [{
+        "id": r.id,
+        "title": r.title,
+        "url": r.url,
+        "seconds": round((r.dwell_time_ms or 0) / 1000),
+        "words": len((r.content or "").split()),
+        "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+    } for r in rows if len((r.content or "").split()) > 300]
+
+    return {"status": "success", "items": items[:30], "total": len(items)}
+
+
+# ─── Export ─────────────────────────────────────────────────────────────────
+
+def _slugify(value: str) -> str:
+    keep = [c if (c.isalnum() or c in " -_") else " " for c in (value or "")]
+    return " ".join("".join(keep).split())[:80] or "untitled"
+
+
+@app.post("/api/export")
+def export_notes(req: ExportRequest, db: Session = Depends(get_db)):
+    """
+    Write journals (and highlights) as Markdown into a folder — e.g. an Obsidian
+    vault. Notes cross-link with [[wikilinks]] so they behave like vault notes
+    rather than loose files.
+    """
+    dest = os.path.abspath(os.path.expanduser(req.dest_path))
+    try:
+        os.makedirs(dest, exist_ok=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot write to {dest}: {e}")
+
+    written = 0
+
+    for note in db.query(DailyNote).order_by(DailyNote.date).all():
+        filename = f"{note.note_type.capitalize()} {note.date}.md"
+        body = f"---\ntype: {note.note_type}\ndate: {note.date}\n---\n\n{note.content or ''}\n"
+
+        if note.note_type == "daily":
+            highlights = db.query(Highlight).filter(
+                func.date(Highlight.timestamp) == note.date
+            ).all()
+            if highlights:
+                body += "\n## ⭐ Highlights\n\n"
+                for h in highlights:
+                    body += f"> {h.selected_text}\n>\n> — [{h.title or h.url}]({h.url})\n"
+                    if h.note:
+                        body += f">\n> **Note:** {h.note}\n"
+                    body += "\n"
+
+        with open(os.path.join(dest, filename), "w", encoding="utf-8") as f:
+            f.write(body)
+        written += 1
+
+    if req.include_highlights:
+        highlights = db.query(Highlight).order_by(desc(Highlight.timestamp)).all()
+        if highlights:
+            body = "---\ntype: highlights-index\n---\n\n# ⭐ All Highlights\n\n"
+            for h in highlights:
+                day = h.timestamp.date().isoformat() if h.timestamp else "unknown"
+                body += f"- > {h.selected_text[:300]}\n  — [{h.title or h.url}]({h.url}) · [[Daily {day}]]\n\n"
+            with open(os.path.join(dest, "All Highlights.md"), "w", encoding="utf-8") as f:
+                f.write(body)
+            written += 1
+
+    # Remember the destination so the UI can offer it next time.
+    setting = db.query(UserSettings).filter(UserSettings.key == "export_path").first()
+    if setting:
+        setting.value = dest
+    else:
+        db.add(UserSettings(key="export_path", value=dest))
+    db.commit()
+
+    return {"status": "success", "written": written, "dest": dest}
+
+
+# ─── Semantic Search & Ask ──────────────────────────────────────────────────
+
+SOURCE_LABELS = {
+    "text": "page", "youtube": "video", "pdf": "PDF", "twitter": "thread",
+    "highlight": "highlight you saved", "audio": "audio you listened to",
+    "note": "journal entry",
+}
+
+
+@app.get("/api/semantic-search")
+def semantic_search(
+    q: str = Query(..., min_length=1),
+    top_k: int = Query(8, ge=1, le=50),
+):
+    """Meaning-based search. Complements /api/search, which is keyword-exact."""
+    try:
+        return {"status": "success", "query": q, "results": embeddings.search(q, top_k=top_k)}
+    except Exception as e:
+        return {"status": "error", "message": f"Semantic search unavailable: {e}"}
+
+
+@app.post("/api/ask")
+def ask(q: str = Query(..., min_length=1), top_k: int = Query(8, ge=1, le=20)):
+    """Answer a question from your own browsing history, with citations."""
+    try:
+        hits = embeddings.search(q, top_k=top_k)
+    except Exception as e:
+        return {"status": "error", "message": f"Semantic index unavailable: {e}"}
+
+    if not hits:
+        return {
+            "status": "error",
+            "message": "Nothing indexed yet. Browse a little, then let the indexer run.",
+        }
+
+    context = ""
+    for i, h in enumerate(hits, 1):
+        when = (h["timestamp"] or "")[:10]
+        label = SOURCE_LABELS.get(h["source_type"], h["source_type"])
+        context += f"[{i}] ({label}, {when}) {h['title']} — {h['url']}\n{h['chunk_text']}\n\n"
+
+    prompt = (
+        "You are answering a question using only the user's own browsing history.\n"
+        "Cite the sources you use with their bracket numbers, e.g. [2].\n"
+        "If the excerpts do not contain the answer, say so plainly rather than guessing.\n\n"
+        f"QUESTION: {q}\n\n"
+        f"EXCERPTS FROM THE USER'S HISTORY:\n{context}\n"
+        "Answer in Markdown, concisely:"
+    )
+
+    ai_check = _probe_ai_provider()
+    if not ai_check["ready"]:
+        # The retrieved sources are still useful without a working model.
+        return {
+            "status": "partial",
+            "message": f"AI model not ready — {ai_check.get('error', 'unknown error')}.",
+            "sources": hits,
+        }
+
+    try:
+        answer = call_ai(prompt)
+    except Exception as e:
+        return {"status": "partial", "message": f"AI generation failed: {e}", "sources": hits}
+
+    return {"status": "success", "question": q, "answer": answer, "sources": hits}
+
+
+@app.get("/api/index-status")
+def index_status():
+    return {"status": "success", **embeddings.index_stats()}
+
+
+@app.post("/api/index-now")
+def index_now(limit: int = Query(25, ge=1, le=500)):
+    """Index immediately instead of waiting for the scheduled tick."""
+    try:
+        indexed = embeddings.index_pending(limit=limit)
+        return {"status": "success", "indexed": indexed, **embeddings.index_stats()}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 # ─── Full-Text Search ───────────────────────────────────────────────────────
 
 @app.get("/api/search")
@@ -492,6 +1008,32 @@ def search(q: str = Query(..., min_length=1), db: Session = Depends(get_db)):
         for row in rows:
             results.append({
                 "type": "twitter", "id": row[0], "snippet": row[1], "author": row[2]
+            })
+    except Exception:
+        pass
+
+    # Search saved highlights
+    try:
+        rows = db.execute(text(
+            "SELECT rowid, snippet(highlights_fts, 1, '<mark>', '</mark>', '...', 40) as snippet, "
+            "title FROM highlights_fts WHERE highlights_fts MATCH :q ORDER BY rank LIMIT 10"
+        ), {"q": q}).fetchall()
+        for row in rows:
+            results.append({
+                "type": "highlight", "id": row[0], "snippet": row[1], "title": row[2]
+            })
+    except Exception:
+        pass
+
+    # Search audio transcripts
+    try:
+        rows = db.execute(text(
+            "SELECT rowid, snippet(captured_audio_fts, 1, '<mark>', '</mark>', '...', 40) as snippet, "
+            "url FROM captured_audio_fts WHERE captured_audio_fts MATCH :q ORDER BY rank LIMIT 10"
+        ), {"q": q}).fetchall()
+        for row in rows:
+            results.append({
+                "type": "audio", "id": row[0], "snippet": row[1], "url": row[2]
             })
     except Exception:
         pass
@@ -644,10 +1186,13 @@ DEFAULT_SETTINGS = {
     "local_ai_endpoint": "http://localhost:11434/v1",
     "local_model_name": "qwen2.5:3b",
     "domain_blocklist": "mail.google.com,banking.example.com",
-    "dwell_time_threshold": "0",
+    # Minimum *visible* milliseconds before a page is worth recording.
+    "dwell_time_threshold": "5000",
     "theme": "dark",
     "capture_images": "true",
     "capture_audio": "true",
+    # tiny | base | small | medium — larger is more accurate and slower.
+    "whisper_model": "base",
 }
 
 @app.get("/api/settings")
@@ -683,7 +1228,7 @@ def update_settings(updates: List[SettingUpdate], db: Session = Depends(get_db))
 
 @app.get("/api/captured")
 def browse_captured(
-    type: str = Query("text", pattern="^(text|images|audio|youtube|pdf|twitter)$"),
+    type: str = Query("text", pattern="^(text|images|audio|youtube|pdf|twitter|highlights)$"),
     date_str: Optional[str] = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -697,6 +1242,7 @@ def browse_captured(
         "youtube": CapturedYouTube,
         "pdf": CapturedPDF,
         "twitter": CapturedTwitterThread,
+        "highlights": Highlight,
     }
     model = type_map[type]
     query = db.query(model).order_by(desc(model.timestamp))
@@ -737,6 +1283,14 @@ def browse_captured(
             result["author"] = item.author
         if hasattr(item, 'thread_text'):
             result["thread_text"] = item.thread_text[:500] if item.thread_text else ""
+        if hasattr(item, 'selected_text'):
+            result["selected_text"] = item.selected_text
+        if hasattr(item, 'note'):
+            result["note"] = item.note
+        if hasattr(item, 'transcript_status'):
+            result["transcript_status"] = item.transcript_status
+        if hasattr(item, 'visit_count'):
+            result["visit_count"] = item.visit_count
         if hasattr(item, 'dwell_time_ms'):
             result["dwell_time_ms"] = item.dwell_time_ms
         if hasattr(item, 'extraction_method'):
@@ -759,13 +1313,25 @@ def browse_captured(
 
 # ─── AI Summary Generation ──────────────────────────────────────────────────
 
-def build_summary_prompt(texts, images, youtubes, pdfs, tweets, note_type="daily"):
+def build_summary_prompt(texts, images, youtubes, pdfs, tweets, note_type="daily",
+                         highlights=None, audios=None):
     """Build a rich, structured prompt for AI summary generation."""
+    highlights = highlights or []
+    audios = audios or []
+
     visited_urls = set()
     for t in texts:
         visited_urls.add(t.url)
     for i in images:
         visited_urls.add(i.url)
+
+    # Pages the user returned to, or stayed on, come first — with dedup in place
+    # visit_count and dwell are real importance signals rather than noise.
+    texts = sorted(
+        texts,
+        key=lambda t: ((t.visit_count or 1), (t.dwell_time_ms or 0)),
+        reverse=True,
+    )
 
     prompt = """You are an expert personal journal writer. Based on the following browsing data captured throughout the day, write a rich, insightful daily journal entry.
 
@@ -783,13 +1349,30 @@ def build_summary_prompt(texts, images, youtubes, pdfs, tweets, note_type="daily
 
 """
 
+    # Explicit saves lead: the user chose these deliberately.
+    if highlights:
+        prompt += "### ⭐ Passages the user explicitly saved (HIGHEST SIGNAL — quote these verbatim where relevant):\n"
+        for h in highlights:
+            time_str = h.timestamp.strftime("%H:%M") if h.timestamp else "unknown"
+            prompt += f"- [{time_str}] from **{h.title or h.url}**\n  \"{h.selected_text[:800]}\"\n"
+            if h.note:
+                prompt += f"  User's note: {h.note}\n"
+            prompt += "\n"
+
     # Text content
     if texts:
-        prompt += "### 📝 Pages Visited:\n"
+        prompt += "### 📝 Pages Visited (ordered by engagement):\n"
         for t in texts:
             time_str = t.timestamp.strftime("%H:%M") if t.timestamp else "unknown"
             content_preview = t.content[:400] if t.content else ""
-            prompt += f"- [{time_str}] **{t.title}** ({t.url})\n  {content_preview}\n\n"
+            engagement = ""
+            visits = t.visit_count or 1
+            seconds = round((t.dwell_time_ms or 0) / 1000)
+            if visits > 1:
+                engagement = f" — returned to {visits}×, {seconds}s total"
+            elif seconds:
+                engagement = f" — {seconds}s"
+            prompt += f"- [{time_str}] **{t.title}** ({t.url}){engagement}\n  {content_preview}\n\n"
 
     # YouTube transcripts
     if youtubes:
@@ -812,6 +1395,15 @@ def build_summary_prompt(texts, images, youtubes, pdfs, tweets, note_type="daily
         for tw in tweets:
             thread_preview = tw.thread_text[:400] if tw.thread_text else ""
             prompt += f"- **@{tw.author}** ({tw.tweet_count} tweets)\n  {thread_preview}\n\n"
+
+    # Transcribed tab audio (podcasts, talks, videos without captions)
+    transcribed = [a for a in audios if a.transcript]
+    if transcribed:
+        prompt += "\n### 🎧 Audio Listened To (transcribed locally):\n"
+        for a in transcribed:
+            time_str = a.timestamp.strftime("%H:%M") if a.timestamp else "unknown"
+            minutes = round((a.duration_seconds or 0) / 60, 1)
+            prompt += f"- [{time_str}] {a.url} ({minutes} min)\n  {a.transcript[:800]}\n\n"
 
     # Images (summary only)
     if images:
@@ -869,14 +1461,22 @@ def generate_daily_note(db: Session = Depends(get_db)):
     youtubes = db.query(CapturedYouTube).filter(CapturedYouTube.timestamp >= today_start).all()
     pdfs = db.query(CapturedPDF).filter(CapturedPDF.timestamp >= today_start).all()
     tweets = db.query(CapturedTwitterThread).filter(CapturedTwitterThread.timestamp >= today_start).all()
+    highlights = db.query(Highlight).filter(Highlight.timestamp >= today_start).all()
+    audios = db.query(CapturedAudio).filter(
+        CapturedAudio.timestamp >= today_start,
+        CapturedAudio.transcript.isnot(None),
+    ).all()
 
-    if not texts and not images and not youtubes and not pdfs and not tweets:
+    if not texts and not images and not youtubes and not pdfs and not tweets and not highlights:
         return {
             "status": "error",
             "message": "No data captured today. Browse some pages first!"
         }
 
-    prompt, visited_urls = build_summary_prompt(texts, images, youtubes, pdfs, tweets, "daily")
+    prompt, visited_urls = build_summary_prompt(
+        texts, images, youtubes, pdfs, tweets, "daily",
+        highlights=highlights, audios=audios,
+    )
 
     # Pre-flight: make sure the AI model is reachable before building the note
     ai_check = _probe_ai_provider()
@@ -952,11 +1552,19 @@ def generate_weekly_note(db: Session = Depends(get_db)):
     youtubes = db.query(CapturedYouTube).filter(CapturedYouTube.timestamp >= week_ago).all()
     pdfs = db.query(CapturedPDF).filter(CapturedPDF.timestamp >= week_ago).all()
     tweets = db.query(CapturedTwitterThread).filter(CapturedTwitterThread.timestamp >= week_ago).all()
+    highlights = db.query(Highlight).filter(Highlight.timestamp >= week_ago).all()
+    audios = db.query(CapturedAudio).filter(
+        CapturedAudio.timestamp >= week_ago,
+        CapturedAudio.transcript.isnot(None),
+    ).all()
 
-    if not texts and not images and not youtubes and not pdfs and not tweets:
+    if not texts and not images and not youtubes and not pdfs and not tweets and not highlights:
         return {"status": "error", "message": "No data captured this week."}
 
-    prompt, visited_urls = build_summary_prompt(texts, images, youtubes, pdfs, tweets, "weekly")
+    prompt, visited_urls = build_summary_prompt(
+        texts, images, youtubes, pdfs, tweets, "weekly",
+        highlights=highlights, audios=audios,
+    )
 
     ai_check = _probe_ai_provider()
     if not ai_check["ready"]:
@@ -1008,11 +1616,19 @@ def generate_monthly_note(db: Session = Depends(get_db)):
     youtubes = db.query(CapturedYouTube).filter(CapturedYouTube.timestamp >= month_start).all()
     pdfs = db.query(CapturedPDF).filter(CapturedPDF.timestamp >= month_start).all()
     tweets = db.query(CapturedTwitterThread).filter(CapturedTwitterThread.timestamp >= month_start).all()
+    highlights = db.query(Highlight).filter(Highlight.timestamp >= month_start).all()
+    audios = db.query(CapturedAudio).filter(
+        CapturedAudio.timestamp >= month_start,
+        CapturedAudio.transcript.isnot(None),
+    ).all()
 
-    if not texts and not images and not youtubes and not pdfs and not tweets:
+    if not texts and not images and not youtubes and not pdfs and not tweets and not highlights:
         return {"status": "error", "message": "No data captured this month."}
 
-    prompt, visited_urls = build_summary_prompt(texts, images, youtubes, pdfs, tweets, "monthly")
+    prompt, visited_urls = build_summary_prompt(
+        texts, images, youtubes, pdfs, tweets, "monthly",
+        highlights=highlights, audios=audios,
+    )
 
     ai_check = _probe_ai_provider()
     if not ai_check["ready"]:
@@ -1078,6 +1694,38 @@ try:
     # Monthly: 1st of every month at 11 PM
     scheduler.add_job(scheduled_monthly, CronTrigger(day=1, hour=23, minute=0))
 
+    # Drain the transcription queue one recording at a time. max_instances=1 keeps
+    # a slow transcription from stacking up parallel whisper runs on the CPU.
+    def drain_transcription_queue():
+        try:
+            transcription.transcribe_pending(limit=1)
+        except Exception as e:
+            print(f"Transcription worker error: {e}")
+
+    scheduler.add_job(
+        drain_transcription_queue,
+        'interval',
+        minutes=2,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    # Keep the semantic index caught up with newly captured content.
+    def index_new_content():
+        try:
+            embeddings.index_pending(limit=25)
+        except Exception as e:
+            print(f"Embedding worker error: {e}")
+
+    scheduler.add_job(
+        index_new_content,
+        'interval',
+        minutes=5,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    transcription.reset_stuck_running()
     scheduler.start()
 
     @app.on_event("shutdown")
