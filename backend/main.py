@@ -21,7 +21,7 @@ from database import (
     SessionLocal, engine,
     CapturedText, CapturedImage, CapturedAudio,
     CapturedYouTube, CapturedPDF, CapturedTwitterThread,
-    DailyNote, Tag, PageTag, UserSettings, Highlight
+    DailyNote, Tag, PageTag, UserSettings, Highlight, local_now
 )
 import transcription
 import embeddings
@@ -194,7 +194,7 @@ def health_check():
     ai_status = _probe_ai_provider()
     return {
         "status": "ok",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": local_now().isoformat(),
         "version": "2.0.0",
         "ai_ready": ai_status["ready"],
         "ai_provider": ai_status["provider"],
@@ -456,7 +456,7 @@ def save_text(req: TextRequest, db: Session = Depends(get_db)):
     if existing:
         existing.visit_count = (existing.visit_count or 1) + 1
         existing.dwell_time_ms = (existing.dwell_time_ms or 0) + req.dwell_time_ms
-        existing.timestamp = datetime.utcnow()
+        existing.timestamp = local_now()
         db.commit()
         return {"status": "merged", "id": existing.id, "visit_count": existing.visit_count}
 
@@ -684,7 +684,7 @@ def backfill_history(items: List[HistoryItem], db: Session = Depends(get_db)):
         url_norm = normalize_url(item.url)
         when = (
             datetime.fromtimestamp(item.last_visit_ms / 1000)
-            if item.last_visit_ms else datetime.utcnow()
+            if item.last_visit_ms else local_now()
         )
         day_start = datetime.combine(when.date(), datetime.min.time())
         day_end = day_start + timedelta(days=1)
@@ -735,7 +735,7 @@ def analytics(days: int = Query(7, ge=1, le=365), db: Session = Depends(get_db))
         entry["seconds"] += round((r.dwell_time_ms or 0) / 1000)
         entry["visits"] += r.visit_count or 1
 
-        day = (r.timestamp or datetime.utcnow()).date().isoformat()
+        day = (r.timestamp or local_now()).date().isoformat()
         day_entry = by_day.setdefault(day, {"date": day, "pages": 0, "seconds": 0})
         day_entry["pages"] += 1
         day_entry["seconds"] += round((r.dwell_time_ms or 0) / 1000)
@@ -1511,7 +1511,7 @@ def generate_daily_note(db: Session = Depends(get_db)):
     if existing_note:
         existing_note.content = full_content
         existing_note.filepath = os.path.abspath(relative_path)
-        existing_note.generated_at = datetime.utcnow()
+        existing_note.generated_at = local_now()
     else:
         db_note = DailyNote(
             date=date_str,
@@ -1596,7 +1596,7 @@ def generate_weekly_note(db: Session = Depends(get_db)):
     if existing_note:
         existing_note.content = full_content
         existing_note.filepath = os.path.abspath(relative_path)
-        existing_note.generated_at = datetime.utcnow()
+        existing_note.generated_at = local_now()
     else:
         db_note = DailyNote(date=week_str, note_type="weekly", filepath=os.path.abspath(relative_path), content=full_content)
         db.add(db_note)
@@ -1658,7 +1658,7 @@ def generate_monthly_note(db: Session = Depends(get_db)):
     if existing_note:
         existing_note.content = full_content
         existing_note.filepath = os.path.abspath(relative_path)
-        existing_note.generated_at = datetime.utcnow()
+        existing_note.generated_at = local_now()
     else:
         db_note = DailyNote(date=month_str, note_type="monthly", filepath=os.path.abspath(relative_path), content=full_content)
         db.add(db_note)

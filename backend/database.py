@@ -15,6 +15,20 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+def local_now():
+    """
+    Capture timestamps are stored in LOCAL time, deliberately.
+
+    Every "today" window in this app is built from `date.today()` — the user's
+    local day — and journals are keyed by local date. Storing UTC while querying
+    against local midnight silently dropped every row captured between local
+    midnight and the UTC offset: eight hours a day at UTC+8, during which stats
+    read zero, the daily note saw no data, and revisit de-duplication never
+    matched. One clock everywhere is what keeps those agree.
+    """
+    return datetime.now()
+
+
 # ─── Existing Tables (enhanced) ──────────────────────────────────────────────
 
 class CapturedText(Base):
@@ -28,7 +42,7 @@ class CapturedText(Base):
     content_hash = Column(String, index=True)  # sha256 of normalised content, for per-day dedup
     url_norm = Column(String, index=True)  # url minus fragment and tracking params
     visit_count = Column(Integer, default=1)  # revisits merge into one row per day
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=local_now)
 
 class CapturedImage(Base):
     __tablename__ = "captured_images"
@@ -36,7 +50,7 @@ class CapturedImage(Base):
     url = Column(String, index=True)
     image_url = Column(String)
     alt_text = Column(String)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=local_now)
 
 class CapturedAudio(Base):
     __tablename__ = "captured_audio"
@@ -49,7 +63,7 @@ class CapturedAudio(Base):
     transcript_status = Column(String, default="pending")  # pending|running|done|failed|skipped
     transcript_error = Column(Text)
     duration_seconds = Column(Float, default=0)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=local_now)
 
 
 # ─── New Capture Tables ──────────────────────────────────────────────────────
@@ -63,7 +77,7 @@ class CapturedYouTube(Base):
     channel = Column(String)
     transcript = Column(Text)
     duration_seconds = Column(Integer, default=0)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=local_now)
 
 class CapturedPDF(Base):
     __tablename__ = "captured_pdf"
@@ -72,7 +86,7 @@ class CapturedPDF(Base):
     filename = Column(String)
     content = Column(Text)
     page_count = Column(Integer, default=0)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=local_now)
 
 class CapturedTwitterThread(Base):
     __tablename__ = "captured_twitter"
@@ -81,7 +95,7 @@ class CapturedTwitterThread(Base):
     author = Column(String)
     thread_text = Column(Text)
     tweet_count = Column(Integer, default=0)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=local_now)
 
 
 # ─── Highlights (explicit user saves) ───────────────────────────────────────
@@ -93,7 +107,7 @@ class Highlight(Base):
     title = Column(String, default="")
     selected_text = Column(Text)
     note = Column(Text, default="")  # optional user annotation
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=local_now)
 
 
 # ─── Daily / Weekly / Monthly Notes ─────────────────────────────────────────
@@ -105,7 +119,7 @@ class DailyNote(Base):
     note_type = Column(String, default="daily")  # daily, weekly, monthly
     filepath = Column(String)
     content = Column(Text)
-    generated_at = Column(DateTime, default=datetime.utcnow)
+    generated_at = Column(DateTime, default=local_now)
 
 
 # ─── Tags System ─────────────────────────────────────────────────────────────
@@ -115,7 +129,7 @@ class Tag(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
     color = Column(String, default="#7c3aed")  # hex color
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=local_now)
     pages = relationship("PageTag", back_populates="tag", cascade="all, delete-orphan")
 
 class PageTag(Base):
@@ -124,7 +138,7 @@ class PageTag(Base):
     page_url = Column(String, index=True, nullable=False)
     page_title = Column(String, default="")
     tag_id = Column(Integer, ForeignKey("tags.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=local_now)
     tag = relationship("Tag", back_populates="pages")
 
 
@@ -151,7 +165,7 @@ class Embedding(Base):
     vector = Column(LargeBinary)
     dim = Column(Integer, default=0)
     source_timestamp = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=local_now)
 
 
 # ─── User Settings ───────────────────────────────────────────────────────────
