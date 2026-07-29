@@ -1,135 +1,284 @@
-# Everyday Summariser
+<div align="center">
 
-<img src="https://media1.tenor.com/m/yURfo_oem5cAAAAd/business-productive.gif" width="833" height="466.47999999999996" alt="a penguin wearing a top hat and carrying a briefcase is being productive ." fetchpriority="high" style="max-width: 833px;">
+# 📔 Everyday Summariser
 
-## The Story
+**A private, AI-powered journal of everything you browse — generated on your own machine.**
 
-Every day, we consume massive amounts of digital information—reading articles, watching videos, conducting research, and scrolling through social media. Yet, keeping track of what we actually learned or saw remains tedious and time-consuming. We realized we needed a completely frictionless way to capture our daily digital footprint and automatically synthesize it into a clean, searchable journal, all without interrupting our actual workflow. 
+<img src="https://media1.tenor.com/m/yURfo_oem5cAAAAd/business-productive.gif" width="600" alt="A penguin wearing a top hat and carrying a briefcase, being productive.">
 
-To solve this, I built **Everyday Summariser**. It's a Chrome extension that silently and privately records the text, images, and audio you interact with as you browse, securely passing this data to a local Python backend. At the end of the day, a single click triggers an AI model—like Google's Gemini, LM Studio, or Ollama—to process all that scattered data. 
+![Chrome Extension](https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688?logo=fastapi&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-The end result is a beautifully formatted, private Markdown journal generated right on your machine every single day, effectively acting as a perfect second brain for your web browsing.
+[Quick Start](#-quick-start) · [Features](#-features) · [How It Works](#-how-it-works) · [Privacy](#-privacy--security) · [API](#-api-reference)
 
-## Features
+</div>
 
-### 🎯 Smart Content Capture
-- **Readability-Based Extraction**: Uses Mozilla's Readability.js to cleanly extract article text, stripping out ads, navigation, and other noise. Falls back to DOM heuristics and raw text when needed.
-- **Image Context**: Captures source URLs of significant images (filters out tiny tracking pixels and icons).
-- **Audio Capture & Local Transcription**: Records audio from tabs that are playing sound and transcribes it on your machine with `faster-whisper`. Recordings rotate every 10 minutes so each file is a complete, decodable webm.
-- **Highlight to Save**: Select any text and either right-click → *Save highlight to journal* or press `Ctrl+Shift+S`. Saved passages are treated as the highest-signal input and quoted verbatim in your journal.
-- **Engagement-Aware Capture**: A page is recorded once, when you leave it, and only if you actually looked at it for longer than the dwell threshold. Revisits on the same day merge into a single entry with a visit count rather than being counted five times.
-- **YouTube Transcripts**: Automatically pulls captions/transcripts from YouTube videos using the built-in timedtext API.
-- **PDF Extraction**: Captures text from PDFs opened in Chrome using pdf.js.
-- **Twitter/X Threads**: Extracts full thread text from Twitter/X status pages.
-- **Domain Blocklist**: Configure domains to exclude from capture (banking, email, etc.).
+---
 
-### 🤖 AI-Powered Summaries
-- **Categorized Daily Journals**: AI groups your browsing by topic (Research, Entertainment, News, etc.) with relevant emoji.
-- **Key Takeaways**: Extracts the most important learnings and facts from each page.
-- **Time-Based Sections**: Organizes content by Morning / Afternoon / Evening based on timestamps.
-- **Mood & Productivity Analysis**: AI infers focus areas and productivity with a focus score.
-- **Weekly & Monthly Rollups**: Auto-scheduled (Sunday & 1st of month) summaries, plus manual generation anytime.
+## What is this?
 
-### 💬 Ask Your History
-- **Semantic Search**: A local embedding index (`fastembed`, ONNX — no torch, no cloud) finds things by *meaning*, so "scheduling reminders" surfaces a podcast you listened to even though those words never appear on any page you read.
-- **Ask with Citations**: Ask a question and get an answer built only from your own browsing, with bracketed citations back to the source. If the AI model is unreachable, the matching sources are still shown.
-- **Omnibox**: Type `es ` followed by a query in the address bar to search your history without opening anything.
+Everyday Summariser is a Chrome extension + local Python backend that quietly records the text, images, and audio you encounter while browsing. At the end of the day, one click hands that data to an AI model — Gemini, LM Studio, or Ollama — which turns it into a clean, categorized Markdown journal saved on your machine.
 
-### 📊 Insights
-- **Time by Site**: Where attention actually went, from the dwell data already being collected.
-- **Meant to Read**: Long pages you opened but barely looked at — the things you intended to come back to.
-- **Export to Obsidian**: Write every journal and highlight to a vault folder as Markdown with `[[wikilinks]]`.
-- **History Import**: Backfill titles and URLs from recent browsing so a fresh install isn't empty on day one.
-- **Pause Capture**: Stop capturing for 30 or 60 minutes; it resumes on its own.
+Think of it as a **second brain for your web browsing**: searchable, private, and built without you having to lift a finger during the day.
 
-### 🔍 Search & Organize
-- **Full-Text Search**: SQLite FTS5-powered search across all captured text, YouTube transcripts, PDFs, Twitter threads, and generated notes.
-- **Tag System**: Create colored tags and tag specific pages for easy recall.
-- **Journal Timeline**: Browse past daily, weekly, and monthly notes with full markdown rendering.
-- **Raw Data Browser**: Explore all captured content with pagination and filtering.
+<details>
+<summary><b>📖 The longer story</b></summary>
 
-### 🎮 Retro 8-bit Pixel Art UI
-- **Full-Tab Dashboard**: The primary experience with journal timeline, search, raw data browser, tags, generate controls, and settings. Styled with NES-inspired pixel art aesthetics.
-- **Side Panel**: Lightweight companion showing today's stats and quick actions.
-- **Popup**: Quick-status hub with stats, generate button, and dashboard/sidepanel launchers.
-- **Dark & Light Themes**: Both in retro pixel art style with CRT scanline overlay.
-- **Onboarding Wizard**: First-run multi-step setup for backend, AI, and privacy configuration.
+<br>
 
-### 💾 Local & Private
-- All captured data is stored in a local SQLite database (`journal.db`).
-- Generated notes are saved as Markdown files in `backend/daily_notes/`.
-- **Audio never leaves your machine.** Transcription always runs locally via `faster-whisper`, whichever AI provider you pick.
-- **Summarisation depends on your provider.** With `AI_PROVIDER=local` (Ollama / LM Studio) nothing leaves your machine. With `AI_PROVIDER=gemini`, the excerpts used to build the journal are sent to Google.
-- **The backend is authenticated.** Every `/api` route requires a token the extension fetches automatically from `/api/pair`, which only answers requests from a `chrome-extension://` origin. Without it, any page you visit could read your journal from `localhost:8000` — or wipe it.
+Every day, we consume massive amounts of digital information — reading articles, watching videos, conducting research, and scrolling through social media. Yet, keeping track of what we actually learned or saw remains tedious and time-consuming. We realized we needed a completely frictionless way to capture our daily digital footprint and automatically synthesize it into a clean, searchable journal, all without interrupting our actual workflow.
 
-## Repository Structure
+To solve this, I built **Everyday Summariser**. It's a Chrome extension that silently and privately records the text, images, and audio you interact with as you browse, securely passing this data to a local Python backend. At the end of the day, a single click triggers an AI model — like Google's Gemini, LM Studio, or Ollama — to process all that scattered data.
 
-- `backend/`: The FastAPI Python application that handles data storage and AI generation.
-- `extension/`: The Manifest V3 Chrome Extension source code.
+The end result is a beautifully formatted, private Markdown journal generated right on your machine every single day.
 
-## Setup Instructions
+</details>
 
-### 1. Backend Setup (Docker - Recommended)
+---
 
-The simplest way to run the backend is using Docker and Docker Compose. This ensures you don't need to install Python directly on your system.
+## 🚀 Quick Start
 
-1. Ensure you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed.
-2. In the `backend/` folder, copy `.env.example` to `.env` and configure your AI provider (see "AI Configuration" below).
-3. Open a terminal in the root of the project (where `docker-compose.yml` is) and run:
+### Step 1 — Start the backend
+
+Pick **one** of the two options below.
+
+<details open>
+<summary><b>🐳 Option A — Docker (recommended)</b></summary>
+
+<br>
+
+No Python installation required.
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+2. Copy the example config and set your AI provider:
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+3. From the project root (where `docker-compose.yml` lives):
    ```bash
    docker-compose up -d
    ```
-This will build and start the server in the background. To stop it, run `docker-compose down`. All data (database, audio, notes) will persist safely in your local `backend/` folder.
 
-### 1B. Backend Setup (1-Click Start without Docker)
+The server runs in the background on **`http://localhost:8000`**. Stop it with `docker-compose down`.
+All data — database, audio, notes — persists in your local `backend/` folder.
 
-If you don't want to use Docker, we've provided scripts to automatically set up a local Python environment, install dependencies, and start the server:
+</details>
 
-- **Windows**: Double-click `start_windows.bat` in the project root.
-- **macOS / Linux**: Run `./start_mac.sh` in your terminal.
+<details>
+<summary><b>⚡ Option B — 1-click scripts (no Docker)</b></summary>
 
-*On the very first run, this script will create a default `.env` file in the `backend/` folder. You can configure your AI provider either in `backend/.env` or directly inside the Chrome Extension's Onboarding Wizard / Settings page.*
+<br>
 
-#### AI Configuration (in `backend/.env`)
+These scripts create a Python virtual environment, install dependencies, and start the server for you.
 
-- **For Gemini**:
-  ```env
-  AI_PROVIDER=gemini
-  GEMINI_API_KEY=your_gemini_api_key_here
-  ```
-- **For Local AI (LM Studio or Ollama)**:
-  ```env
-  AI_PROVIDER=local
-  # LM Studio default: http://localhost:1234/v1
-  # Ollama default: http://localhost:11434/v1
-  LOCAL_AI_ENDPOINT=http://localhost:1234/v1
-  LOCAL_MODEL_NAME=your_model_name
-  ```
+| Platform | Command |
+|---|---|
+| **Windows** | Double-click `start_windows.bat` |
+| **macOS / Linux** | `./start_mac.sh` |
 
-### 2. Chrome Extension Setup
+On the very first run, the script creates a default `backend/.env` for you. You can configure the AI provider there *or* directly in the extension's Onboarding Wizard / Settings page.
 
-1. Open Chrome and navigate to `chrome://extensions/`.
-2. Enable **Developer mode** in the top right.
-3. Click **Load unpacked** and select the `extension/` directory from this repository.
-4. The onboarding wizard will open on first install to guide you through setup.
+</details>
 
-## Usage
+### Step 2 — Load the Chrome extension
 
-1. Ensure the Python backend is running (`uvicorn main:app`).
-2. Browse the web normally. The extension will silently capture data to your local SQLite database.
-3. **Quick access**: Click the extension icon for a popup with today's stats and quick actions.
-4. **Generate notes**: Click **Generate Daily Note** from the popup, side panel, or full dashboard.
-5. **Dashboard**: Click **📊 Dashboard** from the popup to open the full retro pixel art dashboard with journal timeline, search, tags, raw data browser, and settings.
-6. **Side Panel**: Use Chrome's side panel for a lightweight companion view alongside your browsing.
-7. Your notes are saved as Markdown files in `backend/daily_notes/`.
+1. Open `chrome://extensions/`
+2. Toggle **Developer mode** (top right)
+3. Click **Load unpacked** → select the `extension/` folder
+4. The **Onboarding Wizard** opens automatically to walk you through backend, AI, and privacy setup
 
-## API Endpoints
+### Step 3 — Browse, then generate
+
+Just use the web normally. When you're ready, click **Generate Daily Note** from the popup, side panel, or dashboard.
+
+Your journal lands in **`backend/daily_notes/`** as Markdown. 🎉
+
+---
+
+## ⚙️ AI Configuration
+
+Set these in `backend/.env` (or via the extension's Settings page).
+
+<table>
+<tr><th width="50%">☁️ Google Gemini</th><th width="50%">🏠 Local (LM Studio / Ollama)</th></tr>
+<tr valign="top">
+<td>
+
+```env
+AI_PROVIDER=gemini
+GEMINI_API_KEY=your_api_key_here
+```
+
+Excerpts used to build the journal are sent to Google.
+
+</td>
+<td>
+
+```env
+AI_PROVIDER=local
+LOCAL_AI_ENDPOINT=http://localhost:11434/v1
+LOCAL_MODEL_NAME=qwen2.5:3b
+```
+
+Nothing leaves your machine.
+
+</td>
+</tr>
+</table>
+
+> **Default endpoints** — Ollama: `http://localhost:11434/v1` · LM Studio: `http://localhost:1234/v1`
+
+---
+
+## 🔄 How It Works
+
+```mermaid
+flowchart LR
+    A["🌐 You browse<br/>the web"] --> B["🧩 Chrome Extension<br/>text · images · audio"]
+    B -->|"authenticated<br/>localhost:8000"| C["🐍 FastAPI Backend"]
+    C --> D["🗄️ SQLite<br/>journal.db"]
+    C --> E["🎙️ faster-whisper<br/>local transcription"]
+    C --> F["🧠 fastembed<br/>semantic index"]
+    D --> G["🤖 AI Provider<br/>Gemini / Ollama / LM Studio"]
+    G --> H["📝 Markdown journal<br/>backend/daily_notes/"]
+```
+
+---
+
+## ✨ Features
+
+<details open>
+<summary><b>🎯 Smart Content Capture</b></summary>
+
+| Capability | What it does |
+|---|---|
+| **Readability-based extraction** | Uses Mozilla's Readability.js to cleanly extract article text, stripping ads and navigation. Falls back to DOM heuristics and raw text when needed. |
+| **Image context** | Captures source URLs of significant images, filtering out tiny tracking pixels and icons. |
+| **Audio + local transcription** | Records audio from tabs playing sound and transcribes it locally with `faster-whisper`. Recordings rotate every 10 minutes so each file is a complete, decodable webm. |
+| **Highlight to save** | Select text → right-click *Save highlight to journal*, or press `Ctrl+Shift+S`. Highlights are the highest-signal input and get quoted verbatim. |
+| **Engagement-aware** | A page is recorded once, when you leave it, and only if you actually looked at it past the dwell threshold. Same-day revisits merge into one entry with a visit count. |
+| **YouTube transcripts** | Automatically pulls captions via the built-in timedtext API. |
+| **PDF extraction** | Captures text from PDFs opened in Chrome using pdf.js. |
+| **Twitter/X threads** | Extracts full thread text from status pages. |
+| **Domain blocklist** | Exclude domains from capture entirely — banking, email, whatever you want off the record. |
+
+</details>
+
+<details>
+<summary><b>🤖 AI-Powered Summaries</b></summary>
+
+- **Categorized daily journals** — grouped by topic (Research, Entertainment, News…) with relevant emoji
+- **Key takeaways** — the most important learnings and facts from each page
+- **Time-based sections** — Morning / Afternoon / Evening, based on timestamps
+- **Mood & productivity analysis** — inferred focus areas plus a focus score
+- **Weekly & monthly rollups** — auto-scheduled (Sunday & the 1st), or generated manually anytime
+
+</details>
+
+<details>
+<summary><b>💬 Ask Your History</b></summary>
+
+- **Semantic search** — a local embedding index (`fastembed`, ONNX — no torch, no cloud) finds things by *meaning*, so "scheduling reminders" surfaces a podcast you listened to even though those words never appear on any page you read
+- **Ask with citations** — answers built only from your own browsing, with bracketed citations back to the source. If the AI model is unreachable, matching sources are still shown
+- **Omnibox** — type `es ` followed by a query in the address bar to search without opening anything
+
+</details>
+
+<details>
+<summary><b>📊 Insights</b></summary>
+
+- **Time by site** — where attention actually went, from dwell data already being collected
+- **Meant to read** — long pages you opened but barely looked at; the things you intended to come back to
+- **Export to Obsidian** — write every journal and highlight to a vault folder as Markdown with `[[wikilinks]]`
+- **History import** — backfill titles and URLs from recent browsing so a fresh install isn't empty on day one
+- **Pause capture** — stop for 30 or 60 minutes; it resumes on its own
+
+</details>
+
+<details>
+<summary><b>🔍 Search & Organize</b></summary>
+
+- **Full-text search** — SQLite FTS5 across all captured text, YouTube transcripts, PDFs, Twitter threads, and generated notes
+- **Tag system** — colored tags on specific pages for easy recall
+- **Journal timeline** — browse past daily, weekly, and monthly notes with full Markdown rendering
+- **Raw data browser** — explore all captured content with pagination and filtering
+
+</details>
+
+<details>
+<summary><b>🎮 Retro 8-bit Pixel Art UI</b></summary>
+
+| Surface | Purpose |
+|---|---|
+| **Full-tab dashboard** | The primary experience — journal timeline, search, raw data browser, tags, generate controls, settings. NES-inspired pixel art styling. |
+| **Side panel** | Lightweight companion showing today's stats and quick actions alongside your browsing. |
+| **Popup** | Quick-status hub with stats, generate button, and dashboard/side-panel launchers. |
+| **Themes** | Dark & light, both retro, with a CRT scanline overlay. |
+| **Onboarding wizard** | First-run multi-step setup for backend, AI, and privacy. |
+
+</details>
+
+---
+
+## 🔒 Privacy & Security
+
+| | |
+|---|---|
+| 🗄️ **Local storage** | All captured data lives in a local SQLite database (`journal.db`). Notes are plain Markdown in `backend/daily_notes/`. |
+| 🎙️ **Audio never leaves your machine** | Transcription always runs locally via `faster-whisper`, whichever AI provider you pick. |
+| 🤖 **Summarisation depends on your provider** | `AI_PROVIDER=local` (Ollama / LM Studio) → nothing leaves your machine. `AI_PROVIDER=gemini` → journal excerpts are sent to Google. |
+| 🔑 **The backend is authenticated** | Every `/api` route requires a token the extension fetches from `/api/pair`, which only answers requests from a `chrome-extension://` origin. Without it, any page you visit could read your journal from `localhost:8000` — or wipe it. |
+
+---
+
+## 📅 Daily Usage
+
+1. Make sure the backend is running (`uvicorn main:app`, or via Docker / the start scripts).
+2. Browse normally — capture happens silently in the background.
+3. **Quick check:** click the extension icon for today's stats and quick actions.
+4. **Generate:** hit **Generate Daily Note** from the popup, side panel, or dashboard.
+5. **Explore:** open **📊 Dashboard** for the journal timeline, search, tags, raw data browser, and settings.
+6. **Alongside browsing:** use Chrome's side panel for the lightweight companion view.
+7. **Read:** your notes are Markdown files in `backend/daily_notes/`.
+
+---
+
+## 📁 Project Structure
+
+```
+EverydaySummariser/
+├── backend/              # FastAPI app — storage, transcription, AI generation
+│   ├── main.py           #   API routes
+│   ├── database.py       #   SQLite schema & queries
+│   ├── embeddings.py     #   Semantic index (fastembed)
+│   ├── transcription.py  #   Local audio transcription (faster-whisper)
+│   ├── daily_notes/      #   📝 Your generated journals live here
+│   └── .env              #   AI provider configuration
+├── extension/            # Manifest V3 Chrome extension
+│   ├── background.js     #   Service worker & capture orchestration
+│   ├── content.js        #   Page text/image extraction
+│   ├── dashboard.*       #   Full-tab retro dashboard
+│   ├── popup.* │ sidepanel.* │ onboarding.*
+│   └── youtube.js │ pdf-capture.js │ twitter.js
+├── docker-compose.yml
+├── start_windows.bat     # 1-click start (Windows)
+└── start_mac.sh          # 1-click start (macOS / Linux)
+```
+
+---
+
+## 📡 API Reference
+
+Base URL: `http://localhost:8000`. All routes require the pairing token except `/api/health` and `/api/pair`.
+
+<details>
+<summary><b>📥 Capture</b></summary>
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/health` | GET | Health check (no token required) |
-| `/api/pair` | GET | Returns the API token; only answers `chrome-extension://` origins |
-| `/api/stats` | GET | Today's capture counts |
 | `/api/text` | POST | Save captured page text |
 | `/api/images` | POST | Save captured image URLs |
 | `/api/audio` | POST | Save captured audio file |
@@ -138,25 +287,81 @@ If you don't want to use Docker, we've provided scripts to automatically set up 
 | `/api/twitter` | POST | Save Twitter thread text |
 | `/api/highlights` | GET/POST | List or save explicitly highlighted passages |
 | `/api/highlights/{id}` | DELETE | Delete a highlight |
-| `/api/transcription-status` | GET | Transcription queue counts by status |
-| `/api/transcribe-now` | POST | Drain the transcription queue immediately |
+| `/api/backfill-history` | POST | Import browser history (metadata only) |
+
+</details>
+
+<details>
+<summary><b>🧠 AI & Search</b></summary>
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/search?q=...` | GET | Full-text search (includes highlights and transcripts) |
 | `/api/semantic-search?q=...` | GET | Meaning-based search over the embedding index |
 | `/api/ask?q=...` | POST | Answer a question from your history, with citations |
 | `/api/index-status` | GET | Embedding index chunk counts |
 | `/api/index-now` | POST | Index new content immediately |
-| `/api/analytics?days=N` | GET | Time by site, by day, and top pages |
-| `/api/reading-queue` | GET | Long pages you opened but barely read |
-| `/api/backfill-history` | POST | Import browser history (metadata only) |
-| `/api/export` | POST | Export notes and highlights as Markdown |
-| `/api/search?q=...` | GET | Full-text search (includes highlights and transcripts) |
+| `/api/transcription-status` | GET | Transcription queue counts by status |
+| `/api/transcribe-now` | POST | Drain the transcription queue immediately |
+
+</details>
+
+<details>
+<summary><b>📝 Notes & Generation</b></summary>
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/generate-daily-note` | POST | Generate daily note |
+| `/api/generate-weekly-note` | POST | Generate weekly rollup |
+| `/api/generate-monthly-note` | POST | Generate monthly rollup |
 | `/api/notes` | GET | List all generated notes |
 | `/api/notes/{date}` | GET | Get a specific note |
+| `/api/export` | POST | Export notes and highlights as Markdown |
+
+</details>
+
+<details>
+<summary><b>📊 Insights & Data</b></summary>
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/stats` | GET | Today's capture counts |
+| `/api/analytics?days=N` | GET | Time by site, by day, and top pages |
+| `/api/reading-queue` | GET | Long pages you opened but barely read |
+| `/api/captured` | GET | Browse raw captured data |
+| `/api/clear-today` | POST | Clear today's data |
+
+</details>
+
+<details>
+<summary><b>🏷️ Tags & Settings</b></summary>
+
+| Endpoint | Method | Description |
+|---|---|---|
 | `/api/tags` | GET/POST | List/create tags |
 | `/api/tag-page` | POST | Tag a page |
 | `/api/tagged-pages` | GET | Get tagged pages |
 | `/api/settings` | GET/PUT | Get/update settings |
-| `/api/captured` | GET | Browse raw captured data |
-| `/api/generate-daily-note` | POST | Generate daily note |
-| `/api/generate-weekly-note` | POST | Generate weekly rollup |
-| `/api/generate-monthly-note` | POST | Generate monthly rollup |
-| `/api/clear-today` | POST | Clear today's data |
+
+</details>
+
+<details>
+<summary><b>🔧 System</b></summary>
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/health` | GET | Health check (no token required) |
+| `/api/pair` | GET | Returns the API token; only answers `chrome-extension://` origins |
+
+</details>
+
+---
+
+## 📄 License
+
+Released under the [MIT License](LICENSE).
+
+<div align="center">
+<br>
+<sub>Built for people who read a lot and remember little.</sub>
+</div>
